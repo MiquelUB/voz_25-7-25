@@ -13,8 +13,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const MyAccount = () => {
-  const [activeTab, setActiveTab] = useState("professional");
-  const [profileData, setProfileData] = useState<Tables<'profiles'>>();
+  const [profileData, setProfileData] = useState<Tables<'profiles'> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -45,7 +44,6 @@ const MyAccount = () => {
       } else {
         setProfileData(data);
       }
-
       setIsLoading(false);
     };
 
@@ -60,8 +58,7 @@ const MyAccount = () => {
     const updates = {
       nombre_completo: formData.get('fullName') as string,
       numero_colegiado: formData.get('collegiateNumber') as string,
-      // Assuming 'clinicName' is not a direct field in 'profiles' table based on types.ts
-      // If it is, you should add it to the table and here.
+      // Aquí podrías añadir más campos si los incluyes en el formulario y la tabla
     };
 
     const { data: { user } } = await supabase.auth.getUser();
@@ -76,43 +73,32 @@ const MyAccount = () => {
         variant: "destructive",
       });
     } else {
+      // Optimistic update of local state
+      setProfileData(prev => prev ? { ...prev, ...updates } : null);
       toast({
         title: "Éxito",
         description: "Datos actualizados correctamente.",
       });
       setIsEditing(false);
-      // Refetch profile data to show the latest updates
-      const { data, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
-      if (!profileError) {
-        setProfileData(data);
-      }
     }
   };
 
-  const usagePercentage = profileData ? (profileData.informes_restantes / (profileData.plan_actual === 'Plan Profesional' ? 100 : 150)) * 100 : 0;
+  const totalReports = profileData?.plan_actual === 'Plan Clínica' ? 150 : 100;
+  const reportsRemaining = profileData?.informes_restantes ?? 0;
+  const reportsUsed = totalReports - reportsRemaining;
+  const usagePercentage = (reportsUsed / totalReports) * 100;
 
   return (
     <div className="min-h-screen bg-background">
       <NavigationHeader />
-      
       <div className="container mx-auto px-6 py-8">
         <h1 className="font-serif text-3xl font-medium text-foreground mb-8">Mi Cuenta</h1>
         
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs defaultValue="professional" className="w-full">
           <TabsList className="grid w-full grid-cols-3 mb-8">
-            <TabsTrigger value="professional" className="font-sans">
-              Mis Datos Profesionales
-            </TabsTrigger>
-            <TabsTrigger value="security" className="font-sans">
-              Cuenta y Seguridad
-            </TabsTrigger>
-            <TabsTrigger value="subscription" className="font-sans">
-              Suscripción y Facturación
-            </TabsTrigger>
+            <TabsTrigger value="professional">Mis Datos Profesionales</TabsTrigger>
+            <TabsTrigger value="security">Cuenta y Seguridad</TabsTrigger>
+            <TabsTrigger value="subscription">Suscripción y Facturación</TabsTrigger>
           </TabsList>
 
           {/* Tab 1: Mis Datos Profesionales */}
@@ -120,91 +106,78 @@ const MyAccount = () => {
             <Card>
               <CardHeader>
                 <CardTitle className="font-serif">Mis Datos Profesionales</CardTitle>
-                <CardDescription className="font-sans">
-                  Gestiona tu información profesional y de contacto
-                </CardDescription>
+                <CardDescription>Gestiona tu información profesional y de contacto</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                {isLoading ? (
-                  <div className="flex flex-col items-center space-y-4">
-                    <Skeleton className="w-24 h-24 rounded-full" />
-                    <Skeleton className="h-10 w-40" />
-                  </div>
+                 {isLoading ? (
+                  <>
+                    <div className="flex flex-col items-center space-y-4">
+                      <Skeleton className="w-24 h-24 rounded-full" />
+                      <Skeleton className="h-10 w-40" />
+                    </div>
+                    <div className="grid gap-4 mt-6">
+                      <Skeleton className="h-10" />
+                      <Skeleton className="h-10" />
+                      <Skeleton className="h-10" />
+                    </div>
+                  </>
                 ) : (
-                  <div className="flex flex-col items-center space-y-4">
-                    <div className="relative">
-                      <div className="w-24 h-24 bg-muted rounded-full flex items-center justify-center overflow-hidden">
-                        <img
-                          src="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158"
-                          alt="Profile"
-                          className="w-full h-full object-cover"
+                  <>
+                    <div className="flex flex-col items-center space-y-4">
+                      <div className="relative">
+                        <div className="w-24 h-24 bg-muted rounded-full flex items-center justify-center overflow-hidden">
+                          <img
+                            src="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158"
+                            alt="Profile"
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <Button
+                          size="icon"
+                          variant="secondary"
+                          className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full"
+                        >
+                          <Camera className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <Button variant="outline" className="font-sans">
+                        Cambiar Foto de Perfil
+                      </Button>
+                    </div>
+                    <form onSubmit={handleUpdateProfile} className="grid gap-4">
+                      <div>
+                        <Label htmlFor="fullName" className="font-sans">Nombre Completo</Label>
+                        <Input
+                          id="fullName"
+                          name="fullName"
+                          defaultValue={profileData?.nombre_completo || ''}
+                          className="font-sans"
+                          readOnly={!isEditing}
                         />
                       </div>
-                      <Button
-                        size="icon"
-                        variant="secondary"
-                        className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full"
-                      >
-                        <Camera className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <Button variant="outline" className="font-sans">
-                      Cambiar Foto de Perfil
-                    </Button>
-                  </div>
-                )}
 
-                {isLoading ? (
-                  <div className="grid gap-4">
-                    <Skeleton className="h-10" />
-                    <Skeleton className="h-10" />
-                    <Skeleton className="h-10" />
-                  </div>
-                ) : (
-                  <form onSubmit={handleUpdateProfile} className="grid gap-4">
-                    <div>
-                      <Label htmlFor="fullName" className="font-sans">Nombre Completo</Label>
-                      <Input
-                        id="fullName"
-                        name="fullName"
-                        defaultValue={profileData?.nombre_completo || ''}
-                        className="font-sans"
-                        readOnly={!isEditing}
-                      />
-                    </div>
+                      <div>
+                        <Label htmlFor="collegiateNumber" className="font-sans">Nº de Colegiado</Label>
+                        <Input
+                          id="collegiateNumber"
+                          name="collegiateNumber"
+                          defaultValue={profileData?.numero_colegiado || ''}
+                          className="font-sans"
+                          readOnly={!isEditing}
+                        />
+                      </div>
 
-                    <div>
-                      <Label htmlFor="collegiateNumber" className="font-sans">Nº de Colegiado</Label>
-                      <Input
-                        id="collegiateNumber"
-                        name="collegiateNumber"
-                        defaultValue={profileData?.numero_colegiado || ''}
-                        className="font-sans"
-                        readOnly={!isEditing}
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="clinicName" className="font-sans">Nombre de la Consulta</Label>
-                      <Input
-                        id="clinicName"
-                        name="clinicName"
-                        defaultValue={profileData?.nombre_completo || ''} // Assuming this maps to 'nombre_completo' for now
-                        className="font-sans"
-                        readOnly={!isEditing}
-                      />
-                    </div>
-
-                    {isEditing ? (
-                      <Button type="submit" className="w-full font-sans">
-                        Guardar Cambios
-                      </Button>
-                    ) : (
-                      <Button onClick={() => setIsEditing(true)} className="w-full font-sans" type="button">
-                        Editar Perfil
-                      </Button>
-                    )}
-                  </form>
+                      {isEditing ? (
+                        <Button type="submit" className="w-full font-sans">
+                          Guardar Cambios
+                        </Button>
+                      ) : (
+                        <Button onClick={() => setIsEditing(true)} className="w-full font-sans" type="button">
+                          Editar Perfil
+                        </Button>
+                      )}
+                    </form>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -300,7 +273,7 @@ const MyAccount = () => {
                         <div className="flex justify-between items-center mb-2">
                           <Label className="font-sans text-sm text-muted-foreground">Informes Usados</Label>
                           <span className="font-sans text-sm text-muted-foreground">
-                            {profileData?.informes_restantes} / {profileData?.plan_actual === 'Plan Profesional' ? 100 : 150}
+                            {reportsUsed} / {totalReports}
                           </span>
                         </div>
                         <Progress value={usagePercentage} className="h-3" />

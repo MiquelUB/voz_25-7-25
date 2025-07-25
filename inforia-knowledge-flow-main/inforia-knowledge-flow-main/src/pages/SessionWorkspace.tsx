@@ -4,6 +4,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { NavigationHeader } from "@/components/NavigationHeader";
 import { Play, Square, Upload, FileAudio, Volume2, Trash2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/components/ui/use-toast";
 
 const SessionWorkspace = () => {
   const [isRecording, setIsRecording] = useState(false);
@@ -11,6 +13,7 @@ const SessionWorkspace = () => {
   const [notes, setNotes] = useState("");
   const [hasFinishedRecording, setHasFinishedRecording] = useState(false);
   const [finalDuration, setFinalDuration] = useState("");
+  const { toast } = useToast();
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -44,6 +47,46 @@ const SessionWorkspace = () => {
     setHasFinishedRecording(false);
     setTimer("00:00");
     setFinalDuration("");
+  };
+
+  const handleGenerateReport = async () => {
+    // Simulate report generation
+    toast({
+      title: "Generando informe...",
+      description: "La IA está procesando la información.",
+    });
+
+    // Simulate a delay for report generation
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // After successful report generation, decrement the report count
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('informes_restantes')
+        .eq('user_id', user.id)
+        .single();
+
+      if (profileError) {
+        console.error("Error fetching profile:", profileError);
+      } else if (profile) {
+        const newCount = profile.informes_restantes - 1;
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ informes_restantes: newCount })
+          .eq('user_id', user.id);
+
+        if (updateError) {
+          console.error("Error updating report count:", updateError);
+        }
+      }
+    }
+
+    toast({
+      title: "Informe generado con éxito",
+      description: "El informe se ha guardado en tu Google Drive.",
+    });
   };
 
   return (
@@ -166,6 +209,7 @@ const SessionWorkspace = () => {
             <Button 
               size="lg" 
               className="h-12 px-8 text-base font-medium"
+              onClick={handleGenerateReport}
             >
               Generar Informe con IA
             </Button>

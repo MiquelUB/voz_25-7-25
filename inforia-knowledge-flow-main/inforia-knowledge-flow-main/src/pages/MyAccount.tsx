@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Camera, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,28 +8,98 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { NavigationHeader } from "@/components/NavigationHeader";
+import { supabase } from "@/integrations/supabase/supabaseClient";
+import { useToast } from "@/components/ui/use-toast";
 
 const MyAccount = () => {
   const [activeTab, setActiveTab] = useState("professional");
+  const [profileData, setProfileData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
-  // Mock data
-  const mockUser = {
-    name: "Dr. María González",
-    collegiateNumber: "28-4567-89",
-    clinicName: "Centro de Psicología Integral",
-    email: "maria.gonzalez@email.com",
-    currentPlan: "Plan Profesional",
-    reportsUsed: 34,
-    reportsTotal: 100
+  const fetchProfileData = async () => {
+    setLoading(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+      if (error) {
+        console.error("Error fetching profile data:", error);
+      } else {
+        setProfileData(data);
+      }
+    }
+    setLoading(false);
   };
 
+  useEffect(() => {
+    fetchProfileData();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session?.provider_token) {
+        const createCrm = async () => {
+          try {
+            const { error } = await supabase.functions.invoke('create-google-crm', {
+              body: { provider_token: session.provider_token },
+            });
+
+            if (error) throw error;
+
+            toast({
+              title: "Éxito",
+              description: "Tu CRM de Google ha sido creado y conectado.",
+            });
+            fetchProfileData(); // Refresh profile data
+          } catch (error) {
+            toast({
+              title: "Error",
+              description: "No se pudo crear tu CRM de Google. " + error.message,
+              variant: "destructive",
+            });
+          }
+        };
+        createCrm();
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, [toast]);
+
+  const handleConnectToGoogle = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        scopes: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets',
+        redirectTo: window.location.href,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
+    });
+    if (error) {
+      toast({
+        title: "Error",
+        description: "No se pudo iniciar la conexión con Google.",
+        variant: "destructive",
+      });
+    }
+  };
+
+
+  // Mock data
   const mockInvoices = [
     { date: "01/12/2024", concept: "Plan Profesional - Diciembre", amount: "99€", id: "INV-001" },
     { date: "01/11/2024", concept: "Plan Profesional - Noviembre", amount: "99€", id: "INV-002" },
     { date: "01/10/2024", concept: "Plan Profesional - Octubre", amount: "99€", id: "INV-003" }
   ];
 
-  const usagePercentage = (mockUser.reportsUsed / mockUser.reportsTotal) * 100;
+  const usagePercentage = profileData ? (profileData.reports_used / profileData.reports_total) * 100 : 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -90,7 +160,7 @@ const MyAccount = () => {
                     <Label htmlFor="fullName" className="font-sans">Nombre Completo</Label>
                     <Input
                       id="fullName"
-                      defaultValue={mockUser.name}
+                      defaultValue={profileData?.full_name || ''}
                       className="font-sans"
                     />
                   </div>
@@ -99,7 +169,7 @@ const MyAccount = () => {
                     <Label htmlFor="collegiateNumber" className="font-sans">Nº de Colegiado</Label>
                     <Input
                       id="collegiateNumber"
-                      defaultValue={mockUser.collegiateNumber}
+                      defaultValue={profileData?.collegiate_number || ''}
                       className="font-sans"
                     />
                   </div>
@@ -108,7 +178,7 @@ const MyAccount = () => {
                     <Label htmlFor="clinicName" className="font-sans">Nombre de la Consulta</Label>
                     <Input
                       id="clinicName"
-                      defaultValue={mockUser.clinicName}
+                      defaultValue={profileData?.clinic_name || ''}
                       className="font-sans"
                     />
                   </div>
@@ -134,7 +204,7 @@ const MyAccount = () => {
                 <div>
                   <Label className="font-sans">Email de acceso</Label>
                   <Input
-                    value={mockUser.email}
+                    value={profileData?.email || ''}
                     readOnly
                     className="bg-muted font-sans"
                   />
@@ -170,6 +240,19 @@ const MyAccount = () => {
                 <Button className="w-full font-sans">
                   Cambiar Contraseña
                 </Button>
+
+                <div className="border-t pt-6">
+                  <h3 className="text-lg font-medium font-serif">Integraciones</h3>
+                  {profileData?.google_sheet_id ? (
+                    <div className="mt-4 flex items-center">
+                      <p className="font-sans text-green-600">✅ Conectado con Google Workspace</p>
+                    </div>
+                  ) : (
+                    <Button onClick={handleConnectToGoogle} className="w-full font-sans mt-4">
+                      Conectar con Google Workspace
+                    </Button>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -185,14 +268,14 @@ const MyAccount = () => {
                 <CardContent className="space-y-4">
                   <div>
                     <Label className="font-sans text-sm text-muted-foreground">Plan Actual</Label>
-                    <p className="font-serif text-lg font-medium">{mockUser.currentPlan}</p>
+                    <p className="font-serif text-lg font-medium">{profileData?.current_plan}</p>
                   </div>
                   
                   <div>
                     <div className="flex justify-between items-center mb-2">
                       <Label className="font-sans text-sm text-muted-foreground">Informes Usados</Label>
                       <span className="font-sans text-sm text-muted-foreground">
-                        {mockUser.reportsUsed} / {mockUser.reportsTotal}
+                        {profileData?.reports_used} / {profileData?.reports_total}
                       </span>
                     </div>
                     <Progress value={usagePercentage} className="h-3" />

@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "googleapis": "https://deno.land/x/googleapis/mod.ts"
+  }
+}

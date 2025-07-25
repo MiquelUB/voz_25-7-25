@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "googleapis": "https://esm.sh/googleapis@126.0.1"
+  }
+}

@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { NavigationHeader } from "@/components/NavigationHeader";
+import ConnectGoogleButton from "@/components/ui/ConnectGoogleButton";
 
 const MyAccount = () => {
   const [activeTab, setActiveTab] = useState("professional");
@@ -170,6 +171,10 @@ const MyAccount = () => {
                 <Button className="w-full font-sans">
                   Cambiar Contraseña
                 </Button>
+
+                <div className="mt-6">
+                  <ConnectGoogleButton />
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

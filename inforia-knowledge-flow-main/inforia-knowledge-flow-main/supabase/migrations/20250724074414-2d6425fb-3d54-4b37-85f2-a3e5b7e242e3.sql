@@ -19,7 +19,11 @@ CREATE TABLE public.profiles (
   
   -- Metadatos
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
-  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+
+  -- Google OAuth Tokens
+  google_provider_token TEXT,
+  google_provider_refresh_token TEXT
 );
 
 -- Habilitar Row Level Security

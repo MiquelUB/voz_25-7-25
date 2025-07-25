@@ -23,7 +23,8 @@ CREATE TABLE public.profiles (
 
   -- Google OAuth Tokens
   google_provider_token TEXT,
-  google_provider_refresh_token TEXT
+  google_provider_refresh_token TEXT,
+  google_sheet_id TEXT
 );
 
 -- Habilitar Row Level Security

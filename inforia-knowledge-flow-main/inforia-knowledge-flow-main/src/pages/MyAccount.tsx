@@ -10,6 +10,7 @@ import { NavigationHeader } from "@/components/NavigationHeader";
 import ConnectGoogleButton from "@/components/ui/ConnectGoogleButton";
 import { supabase } from "@/integrations/supabase/client";
 import { User } from "@supabase/supabase-js";
+import { gapi } from 'gapi-script';
 
 const MyAccount = () => {
   const [activeTab, setActiveTab] = useState("professional");
@@ -17,6 +18,7 @@ const MyAccount = () => {
   const [profile, setProfile] = useState<any>(null);
 
   useEffect(() => {
+    gapi.load('client');
     const fetchUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
@@ -30,11 +32,39 @@ const MyAccount = () => {
           console.error('Error fetching profile:', error);
         } else {
           setProfile(profileData);
+          if (!profileData.google_sheet_id) {
+            createGoogleSheet();
+          }
         }
       }
     };
     fetchUser();
   }, []);
+
+  const createGoogleSheet = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session || !session.provider_token) {
+      throw new Error("No se ha encontrado el token de acceso de Google.");
+    }
+
+    const accessToken = session.provider_token;
+    gapi.client.setToken({ access_token: accessToken });
+
+    const sheet = await gapi.client.sheets.spreadsheets.create({
+      properties: {
+        title: 'iNFORiA - CRM de Pacientes',
+      },
+    });
+
+    const sheetId = sheet.result.spreadsheetId;
+
+    if (user) {
+      await supabase
+        .from('profiles')
+        .update({ google_sheet_id: sheetId })
+        .eq('user_id', user.id);
+    }
+  };
 
   const handleDisconnectGoogle = async () => {
     if (user) {

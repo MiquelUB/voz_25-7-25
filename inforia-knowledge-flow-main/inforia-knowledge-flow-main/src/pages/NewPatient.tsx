@@ -19,6 +19,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { NavigationHeader } from "@/components/NavigationHeader";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 
 const patientFormSchema = z.object({
   nombre: z.string().min(2, "El nombre debe tener al menos 2 caracteres"),
@@ -36,6 +44,7 @@ type PatientFormValues = z.infer<typeof patientFormSchema>;
 const NewPatient = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+  const [userProfile, setUserProfile] = useState<any>(null);
 
   const form = useForm<PatientFormValues>({
     resolver: zodResolver(patientFormSchema),
@@ -52,33 +61,46 @@ const NewPatient = () => {
   });
 
   useEffect(() => {
-    const start = () => {
-      gapi.client.init({
-        apiKey: 'YOUR_API_KEY', // Replace with your Google API Key
-        clientId: 'YOUR_CLIENT_ID', // Replace with your Google Client ID
-        scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets',
-        discoveryDocs: [
-          'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest',
-          'https://sheets.googleapis.com/$discovery/rest?version=v4',
-        ],
-      });
+    gapi.load('client');
+
+    const fetchUserProfile = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('google_sheet_id')
+          .eq('user_id', user.id)
+          .single();
+
+        if (error) {
+          console.error("Error fetching user profile:", error);
+        } else {
+          setUserProfile(profile);
+        }
+      }
     };
-    gapi.load('client:auth2', start);
+
+    fetchUserProfile();
   }, []);
 
   const handleSavePatient = async (data: PatientFormValues, createReport = false) => {
     setIsSubmitting(true);
 
+    if (!userProfile || !userProfile.google_sheet_id) {
+      toast({ variant: "destructive", title: "Error de configuración", description: "No se ha encontrado el Google Sheet del CRM. Por favor, revisa la conexión en 'Mi Cuenta'." });
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session || !session.provider_token) {
-        throw new Error("No se ha encontrado el token de acceso de Google.");
+        throw new Error("Token de acceso de Google no encontrado.");
       }
 
       const accessToken = session.provider_token;
-      gapi.auth.setToken({ access_token: accessToken });
+      gapi.client.setToken({ access_token: accessToken });
 
-      // 1. Create Google Drive Folder
       const folderName = `${data.nombre} ${data.apellidos} - ${uuidv4()}`;
       const driveResponse = await gapi.client.drive.files.create({
         resource: {
@@ -89,9 +111,8 @@ const NewPatient = () => {
       });
       const folderId = driveResponse.result.id;
 
-      // 2. Add row to Google Sheet
-      const sheetId = 'YOUR_SHEET_ID'; // Replace with your Google Sheet ID
-      const sheetResponse = await gapi.client.sheets.spreadsheets.values.append({
+      const sheetId = userProfile.google_sheet_id;
+      await gapi.client.sheets.spreadsheets.values.append({
         spreadsheetId: sheetId,
         range: 'A1',
         valueInputOption: 'USER_ENTERED',
@@ -112,22 +133,15 @@ const NewPatient = () => {
         },
       });
 
-      toast({
-        title: "Paciente creado correctamente",
-        description: "La ficha del paciente ha sido guardada en Google Drive y Google Sheets.",
-      });
+      toast({ title: "Paciente creado correctamente" });
 
       if (createReport) {
-        // Redirect to create report page with patient data
         // navigate(`/new-report?patient=${folderId}`);
       }
+
     } catch (error) {
       console.error("Error al crear la ficha del paciente:", error);
-      toast({
-        variant: "destructive",
-        title: "Error al crear la ficha del paciente",
-        description: "Por favor, inténtalo de nuevo.",
-      });
+      toast({ variant: "destructive", title: "Error al crear la ficha" });
     } finally {
       setIsSubmitting(false);
     }
@@ -144,85 +158,150 @@ const NewPatient = () => {
           Completa los siguientes campos para crear un nuevo perfil de paciente.
         </p>
 
-        <form
-          onSubmit={form.handleSubmit((data) => handleSavePatient(data, false))}
-          className="space-y-8"
-        >
-          <div className="grid md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <Label htmlFor="nombre">Nombre</Label>
-              <Input id="nombre" {...form.register("nombre")} />
-              {form.formState.errors.nombre && (
-                <p className="text-sm text-red-500">{form.formState.errors.nombre.message}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="apellidos">Apellidos</Label>
-              <Input id="apellidos" {...form.register("apellidos")} />
-              {form.formState.errors.apellidos && (
-                <p className="text-sm text-red-500">{form.formState.errors.apellidos.message}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" {...form.register("email")} />
-              {form.formState.errors.email && (
-                <p className="text-sm text-red-500">{form.formState.errors.email.message}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="telefono">Teléfono</Label>
-              <Input id="telefono" {...form.register("telefono")} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="fechaNacimiento">Fecha de Nacimiento</Label>
-              <Input type="date" id="fechaNacimiento" {...form.register("fechaNacimiento")} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="genero">Género</Label>
-              <Select onValueChange={(value) => form.setValue("genero", value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="masculino">Masculino</SelectItem>
-                  <SelectItem value="femenino">Femenino</SelectItem>
-                  <SelectItem value="otro">Otro</SelectItem>
-                  <SelectItem value="no-especificado">Prefiero no especificar</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="md:col-span-2 space-y-2">
-              <Label htmlFor="direccion">Dirección</Label>
-              <Input id="direccion" {...form.register("direccion")} />
-            </div>
-            <div className="md:col-span-2 space-y-2">
-              <Label htmlFor="motivoConsulta">Motivo de la Consulta</Label>
-              <Textarea
-                id="motivoConsulta"
-                {...form.register("motivoConsulta")}
-                rows={4}
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit((data) => handleSavePatient(data, false))}
+            className="space-y-8"
+          >
+            <div className="grid md:grid-cols-2 gap-6">
+              <FormField
+                control={form.control}
+                name="nombre"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nombre</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
+              <FormField
+                control={form.control}
+                name="apellidos"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Apellidos</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="telefono"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Teléfono</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="fechaNacimiento"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Fecha de Nacimiento</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="genero"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Género</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar..." />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="masculino">Masculino</SelectItem>
+                        <SelectItem value="femenino">Femenino</SelectItem>
+                        <SelectItem value="otro">Otro</SelectItem>
+                        <SelectItem value="no-especificado">Prefiero no especificar</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="md:col-span-2">
+                <FormField
+                  control={form.control}
+                  name="direccion"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Dirección</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <FormField
+                  control={form.control}
+                  name="motivoConsulta"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Motivo de la Consulta</FormLabel>
+                      <FormControl>
+                        <Textarea {...field} rows={4} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             </div>
-          </div>
 
-          <div className="flex justify-end space-x-4">
-            <Button
-              type="submit"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? "Guardando..." : "Guardar Ficha"}
-            </Button>
-            <Button
-              type="button"
-              variant="default"
-              disabled={isSubmitting}
-              onClick={form.handleSubmit((data) => handleSavePatient(data, true))}
-            >
-              {isSubmitting ? "Guardando..." : "Guardar y Crear Informe"}
-            </Button>
-          </div>
-        </form>
+            <div className="flex justify-end space-x-4">
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? "Guardando..." : "Guardar Ficha"}
+              </Button>
+              <Button
+                type="button"
+                variant="default"
+                disabled={isSubmitting}
+                onClick={form.handleSubmit((data) => handleSavePatient(data, true))}
+              >
+                {isSubmitting ? "Guardando..." : "Guardar y Crear Informe"}
+              </Button>
+            </div>
+          </form>
+        </Form>
       </div>
     </div>
   );

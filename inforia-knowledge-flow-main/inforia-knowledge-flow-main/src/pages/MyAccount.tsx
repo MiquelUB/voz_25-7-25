@@ -20,35 +20,60 @@ const MyAccount = () => {
   const [isChangingPlan, setIsChangingPlan] = useState(false);
   const { toast } = useToast();
 
+  const fetchProfile = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setError("No se pudo obtener la información del usuario.");
+      return;
+    }
+
+    const { data, error: profileError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('user_id', user.id)
+      .single();
+
+    if (profileError) {
+      setError("Error al cargar el perfil.");
+      console.error(profileError);
+    } else {
+      setProfileData(data);
+    }
+  };
+
   useEffect(() => {
-    const fetchProfile = async () => {
-      setIsLoading(true);
-      setError(null);
+    setIsLoading(true);
+    fetchProfile().finally(() => setIsLoading(false));
 
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.provider_token) {
+        try {
+          const { error: invokeError } = await supabase.functions.invoke('create-google-crm', {
+            body: { provider_token: session.provider_token, user_id: session.user.id },
+          });
 
-      if (userError || !user) {
-        setError("No se pudo obtener la información del usuario.");
-        setIsLoading(false);
-        return;
+          if (invokeError) {
+            throw new Error(invokeError.message);
+          }
+
+          toast({
+            title: "Conexión exitosa",
+            description: "Tu CRM de Google ha sido creado.",
+          });
+          await fetchProfile(); // Refetch profile to get the new sheet ID
+        } catch (error) {
+          toast({
+            variant: "destructive",
+            title: "Error de conexión",
+            description: (error as Error).message,
+          });
+        }
       }
+    });
 
-      const { data, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
-
-      if (profileError) {
-        setError("Error al cargar el perfil.");
-        console.error(profileError);
-      } else {
-        setProfileData(data);
-      }
-      setIsLoading(false);
+    return () => {
+      authListener.subscription.unsubscribe();
     };
-
-    fetchProfile();
   }, []);
 
   const handleUpdateProfile = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -59,7 +84,6 @@ const MyAccount = () => {
     const updates = {
       nombre_completo: formData.get('fullName') as string,
       numero_colegiado: formData.get('collegiateNumber') as string,
-      // Aquí podrías añadir más campos si los incluyes en el formulario y la tabla
     };
 
     const { data: { user } } = await supabase.auth.getUser();
@@ -74,7 +98,6 @@ const MyAccount = () => {
         variant: "destructive",
       });
     } else {
-      // Optimistic update of local state
       setProfileData(prev => prev ? { ...prev, ...updates } : null);
       toast({
         title: "Éxito",
@@ -115,6 +138,20 @@ const MyAccount = () => {
       });
     }
     setIsChangingPlan(false);
+  };
+
+  const handleConnectToGoogle = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        scopes: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets',
+        redirectTo: window.location.href,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
+    });
   };
 
   const totalReports = profileData?.plan_actual === 'Plan Clínica' ? 150 : 100;
@@ -275,6 +312,19 @@ const MyAccount = () => {
                     <Button className="w-full font-sans">
                       Cambiar Contraseña
                     </Button>
+
+                    <div className="border-t pt-6">
+                      <Label className="font-sans">Integraciones</Label>
+                      {profileData?.google_sheet_id ? (
+                        <div className="flex items-center justify-between mt-2">
+                          <p className="font-sans text-sm text-muted-foreground">✅ Conectado con Google Workspace</p>
+                        </div>
+                      ) : (
+                        <Button onClick={handleConnectToGoogle} className="w-full font-sans mt-2">
+                          Conectar con Google Workspace
+                        </Button>
+                      )}
+                    </div>
                   </>
                 )}
               </CardContent>

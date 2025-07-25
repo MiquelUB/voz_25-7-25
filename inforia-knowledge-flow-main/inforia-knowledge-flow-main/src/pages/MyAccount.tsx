@@ -17,6 +17,7 @@ const MyAccount = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [isChangingPlan, setIsChangingPlan] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -81,6 +82,39 @@ const MyAccount = () => {
       });
       setIsEditing(false);
     }
+  };
+
+  const handlePlanChange = async (newPlan: 'Plan Profesional' | 'Plan Clínica') => {
+    setIsChangingPlan(true);
+    const newReportCount = newPlan === 'Plan Profesional' ? 100 : 150;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setIsChangingPlan(false);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ plan_actual: newPlan, informes_restantes: newReportCount })
+      .eq('user_id', user.id)
+      .select()
+      .single();
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "No se pudo cambiar el plan.",
+        variant: "destructive",
+      });
+    } else {
+      setProfileData(data);
+      toast({
+        title: "Plan actualizado",
+        description: `Tu plan ha sido cambiado a ${newPlan}.`,
+      });
+    }
+    setIsChangingPlan(false);
   };
 
   const totalReports = profileData?.plan_actual === 'Plan Clínica' ? 150 : 100;
@@ -303,9 +337,10 @@ const MyAccount = () => {
                         <li>• Integración básica</li>
                       </ul>
                       <Button
-                        disabled={profileData?.plan_actual === 'Plan Profesional'}
+                        disabled={profileData?.plan_actual === 'Plan Profesional' || isChangingPlan}
                         className="w-full mt-4 font-sans"
                         variant={profileData?.plan_actual === 'Plan Profesional' ? 'outline' : 'default'}
+                        onClick={() => handlePlanChange('Plan Profesional')}
                       >
                         {profileData?.plan_actual === 'Plan Profesional' ? 'Plan Actual' : 'Cambiar a Profesional'}
                       </Button>
@@ -329,9 +364,10 @@ const MyAccount = () => {
                         <li>• Funciones de equipo</li>
                       </ul>
                       <Button
-                        disabled={profileData?.plan_actual === 'Plan Clínica'}
+                        disabled={profileData?.plan_actual === 'Plan Clínica' || isChangingPlan}
                         className="w-full mt-4 font-sans"
                         variant={profileData?.plan_actual === 'Plan Clínica' ? 'outline' : 'default'}
+                        onClick={() => handlePlanChange('Plan Clínica')}
                       >
                         {profileData?.plan_actual === 'Plan Clínica' ? 'Plan Actual' : 'Actualizar a Clínica'}
                       </Button>

@@ -1,6 +1,5 @@
-
-import React, { useState } from "react";
-import { Camera, Download } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Camera, Download, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,9 +7,85 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { NavigationHeader } from "@/components/NavigationHeader";
+import ConnectGoogleButton from "@/components/ui/ConnectGoogleButton";
+import { supabase } from "@/integrations/supabase/client";
+import { User } from "@supabase/supabase-js";
+import { gapi } from 'gapi-script';
 
 const MyAccount = () => {
   const [activeTab, setActiveTab] = useState("professional");
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<any>(null);
+
+  useEffect(() => {
+    gapi.load('client');
+    const fetchUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+      if (user) {
+        const { data: profileData, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('user_id', user.id)
+          .single();
+        if (error) {
+          console.error('Error fetching profile:', error);
+        } else {
+          setProfile(profileData);
+          if (!profileData.google_sheet_id) {
+            createGoogleSheet();
+          }
+        }
+      }
+    };
+    fetchUser();
+  }, []);
+
+  const createGoogleSheet = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session || !session.provider_token) {
+      throw new Error("No se ha encontrado el token de acceso de Google.");
+    }
+
+    const accessToken = session.provider_token;
+    gapi.client.setToken({ access_token: accessToken });
+
+    const sheet = await gapi.client.sheets.spreadsheets.create({
+      properties: {
+        title: 'iNFORiA - CRM de Pacientes',
+      },
+    });
+
+    const sheetId = sheet.result.spreadsheetId;
+
+    if (user) {
+      await supabase
+        .from('profiles')
+        .update({ google_sheet_id: sheetId })
+        .eq('user_id', user.id);
+    }
+  };
+
+  const handleDisconnectGoogle = async () => {
+    if (user) {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          google_provider_token: null,
+          google_provider_refresh_token: null,
+        })
+        .eq('user_id', user.id);
+      if (error) {
+        console.error('Error disconnecting Google account:', error);
+      } else {
+        setProfile({
+          ...profile,
+          google_provider_token: null,
+          google_provider_refresh_token: null,
+        });
+      }
+    }
+  };
 
   // Mock data
   const mockUser = {
@@ -90,7 +165,7 @@ const MyAccount = () => {
                     <Label htmlFor="fullName" className="font-sans">Nombre Completo</Label>
                     <Input
                       id="fullName"
-                      defaultValue={mockUser.name}
+                      defaultValue={profile?.nombre_completo || mockUser.name}
                       className="font-sans"
                     />
                   </div>
@@ -99,7 +174,7 @@ const MyAccount = () => {
                     <Label htmlFor="collegiateNumber" className="font-sans">Nº de Colegiado</Label>
                     <Input
                       id="collegiateNumber"
-                      defaultValue={mockUser.collegiateNumber}
+                      defaultValue={profile?.numero_colegiado || mockUser.collegiateNumber}
                       className="font-sans"
                     />
                   </div>
@@ -108,7 +183,7 @@ const MyAccount = () => {
                     <Label htmlFor="clinicName" className="font-sans">Nombre de la Consulta</Label>
                     <Input
                       id="clinicName"
-                      defaultValue={mockUser.clinicName}
+                      defaultValue={profile?.nombre_clinica || mockUser.clinicName}
                       className="font-sans"
                     />
                   </div>
@@ -134,7 +209,7 @@ const MyAccount = () => {
                 <div>
                   <Label className="font-sans">Email de acceso</Label>
                   <Input
-                    value={mockUser.email}
+                    value={user?.email || mockUser.email}
                     readOnly
                     className="bg-muted font-sans"
                   />
@@ -170,6 +245,21 @@ const MyAccount = () => {
                 <Button className="w-full font-sans">
                   Cambiar Contraseña
                 </Button>
+
+                <div className="mt-6">
+                  <h3 className="font-serif text-lg font-medium mb-4">Integraciones</h3>
+                  {profile?.google_provider_token ? (
+                    <div className="flex items-center justify-between">
+                      <p className="font-sans text-sm">Conectado como: {user?.email}</p>
+                      <Button variant="destructive" onClick={handleDisconnectGoogle}>
+                        <LogOut className="mr-2 h-4 w-4" />
+                        Desconectar
+                      </Button>
+                    </div>
+                  ) : (
+                    <ConnectGoogleButton />
+                  )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -185,14 +275,14 @@ const MyAccount = () => {
                 <CardContent className="space-y-4">
                   <div>
                     <Label className="font-sans text-sm text-muted-foreground">Plan Actual</Label>
-                    <p className="font-serif text-lg font-medium">{mockUser.currentPlan}</p>
+                    <p className="font-serif text-lg font-medium">{profile?.plan_actual || mockUser.currentPlan}</p>
                   </div>
                   
                   <div>
                     <div className="flex justify-between items-center mb-2">
                       <Label className="font-sans text-sm text-muted-foreground">Informes Usados</Label>
                       <span className="font-sans text-sm text-muted-foreground">
-                        {mockUser.reportsUsed} / {mockUser.reportsTotal}
+                        {profile?.informes_usados || mockUser.reportsUsed} / {profile?.informes_totales || mockUser.reportsTotal}
                       </span>
                     </div>
                     <Progress value={usagePercentage} className="h-3" />

@@ -1,16 +1,21 @@
 import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/supabaseClient";
+import { gapi } from "gapi-script";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { NavigationHeader } from "@/components/NavigationHeader";
 import { Play, Square, Upload, FileAudio, Volume2, Trash2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 const SessionWorkspace = () => {
+  const { toast } = useToast();
   const [isRecording, setIsRecording] = useState(false);
   const [timer, setTimer] = useState("00:00");
   const [notes, setNotes] = useState("");
   const [hasFinishedRecording, setHasFinishedRecording] = useState(false);
   const [finalDuration, setFinalDuration] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -44,6 +49,76 @@ const SessionWorkspace = () => {
     setHasFinishedRecording(false);
     setTimer("00:00");
     setFinalDuration("");
+  };
+
+  const handleGenerateReport = async () => {
+    setIsGenerating(true);
+    toast({ title: "Generando informe...", description: "Este proceso puede tardar unos segundos." });
+    try {
+      // Get provider token from Supabase
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionData.session?.provider_token) {
+        throw new Error("No se pudo obtener el token de proveedor de Google.");
+      }
+      const provider_token = sessionData.session.provider_token;
+
+      // Call OpenRouter to generate the report
+      const openRouterResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${"YOUR_OPEN_ROUTER_API_KEY"}`, // Replace with your OpenRouter API key
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          "model": "google/gemini-pro",
+          "messages": [
+            { "role": "system", "content": "Eres un asistente de psicología que genera informes de sesión." },
+            { "role": "user", "content": `Genera un informe de sesión basado en las siguientes notas: ${notes}` }
+          ]
+        })
+      });
+
+      if (!openRouterResponse.ok) {
+        throw new Error("Error al generar el informe con OpenRouter.");
+      }
+
+      const reportData = await openRouterResponse.json();
+      const reportContent = reportData.choices[0].message.content;
+
+      // Save the report to Google Drive
+      await new Promise((resolve, reject) => {
+        gapi.load('client', () => {
+          gapi.client.init({
+            apiKey: 'YOUR_GOOGLE_API_KEY', // Replace with your Google API Key
+            discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"],
+          }).then(resolve).catch(reject);
+        });
+      });
+      gapi.client.setToken({ access_token: provider_token });
+
+      const driveResponse = await gapi.client.drive.files.create({
+        resource: {
+          name: `Informe de Sesión - ${new Date().toLocaleDateString()}.txt`,
+          mimeType: 'text/plain'
+        },
+        media: {
+          mimeType: 'text/plain',
+          body: reportContent
+        }
+      });
+
+      if (!driveResponse.result.id) {
+        throw new Error("No se pudo guardar el informe en Google Drive.");
+      }
+
+      toast({ title: "Informe generado", description: "El informe se ha guardado en tu Google Drive." });
+
+    } catch (error) {
+      console.error("Error al generar el informe:", error);
+      toast({ title: "Error", description: (error as Error).message, variant: "destructive" });
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
@@ -166,8 +241,10 @@ const SessionWorkspace = () => {
             <Button 
               size="lg" 
               className="h-12 px-8 text-base font-medium"
+              onClick={handleGenerateReport}
+              disabled={isGenerating}
             >
-              Generar Informe con IA
+              {isGenerating ? "Generando..." : "Generar Informe con IA"}
             </Button>
           </div>
         </div>

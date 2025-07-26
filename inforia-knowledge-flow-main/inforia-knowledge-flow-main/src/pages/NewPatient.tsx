@@ -1,4 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { gapi } from "gapi-script";
+import { supabase } from "@/integrations/supabase/supabaseClient";
+import { v4 as uuidv4 } from "uuid";
 import { NavigationHeader } from "@/components/NavigationHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,7 +18,6 @@ import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
-import { useEffect } from "react";
 
 interface PatientData {
   firstName: string;
@@ -101,31 +103,105 @@ const NewPatient = () => {
 
   const handleSavePatient = async () => {
     setIsSubmitting(true);
-    
-    // Mock save operation
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    toast({
-      title: "Paciente guardado",
-      description: `La ficha de ${patientData.firstName} ${patientData.lastName} ha sido creada exitosamente.`,
-    });
-    
-    setIsSubmitting(false);
-    navigate("/patient-list");
+    try {
+      // Step 1: Get Credentials
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionData.session) {
+        throw new Error("Error obteniendo la sesión del usuario.");
+      }
+      const provider_token = sessionData.session.provider_token;
+
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('google_sheet_id')
+        .single();
+
+      if (profileError || !profileData?.google_sheet_id) {
+        throw new Error("No se pudo obtener el ID de Google Sheet del perfil.");
+      }
+      const spreadsheetId = profileData.google_sheet_id;
+
+      if (!provider_token) {
+        throw new Error("Token de proveedor de Google no encontrado.");
+      }
+
+      // Step 2: Authenticate GAPI
+      await new Promise((resolve, reject) => {
+        gapi.load('client', () => {
+          gapi.client.init({
+            apiKey: 'YOUR_API_KEY', // IMPORTANT: Replace with your Google API Key
+            discoveryDocs: [
+              "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest",
+              "https://sheets.googleapis.com/$discovery/rest?version=v4",
+            ],
+          }).then(resolve).catch(reject);
+        });
+      });
+      gapi.client.setToken({ access_token: provider_token });
+
+      // Step 3: Create Folder in Google Drive
+      const folderName = `${patientData.firstName} ${patientData.lastName} - ${uuidv4()}`;
+      const driveResponse = await gapi.client.drive.files.create({
+        resource: {
+          name: folderName,
+          mimeType: 'application/vnd.google-apps.folder'
+        },
+        fields: 'id'
+      });
+      const folderId = driveResponse.result.id;
+      if (!folderId) {
+        throw new Error("No se pudo crear la carpeta en Google Drive.");
+      }
+
+      // Step 4: Add Row in Google Sheets
+      const values = [
+        patientData.firstName,
+        patientData.lastName,
+        patientData.email,
+        patientData.phone,
+        patientData.birthDate ? format(patientData.birthDate, "yyyy-MM-dd") : '',
+        patientData.appointmentDate ? format(patientData.appointmentDate, "yyyy-MM-dd") : '',
+        patientData.appointmentTime,
+        patientData.gender,
+        patientData.address,
+        patientData.emergencyContact,
+        patientData.emergencyPhone,
+        patientData.profession,
+        patientData.referredBy,
+        patientData.tags.join(', '),
+        patientData.notes,
+        folderId
+      ];
+
+      await gapi.client.sheets.spreadsheets.values.append({
+        spreadsheetId: spreadsheetId,
+        range: 'A1',
+        valueInputOption: 'USER_ENTERED',
+        resource: {
+          values: [values]
+        }
+      });
+
+      toast({
+        title: "Paciente guardado con éxito",
+        description: `La ficha de ${patientData.firstName} ${patientData.lastName} ha sido creada.`,
+      });
+      navigate("/patient-list");
+
+    } catch (error) {
+      console.error("Error al guardar el paciente:", error);
+      toast({
+        title: "Error al guardar",
+        description: (error as Error).message || "Ocurrió un error inesperado.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSaveAndCreateReport = async () => {
-    setIsSubmitting(true);
-    
-    // Mock save operation
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    toast({
-      title: "Paciente guardado",
-      description: `Ficha creada. Redirigiendo al espacio de trabajo...`,
-    });
-    
-    setIsSubmitting(false);
+    await handleSavePatient();
     navigate("/session-workspace?newPatient=true");
   };
 

@@ -1,165 +1,148 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/supabaseClient";
-import { gapi } from "gapi-script";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { NavigationHeader } from "@/components/NavigationHeader";
-import { Play, Square, Upload, FileAudio, Volume2, Trash2 } from "lucide-react";
+import { Play, Square, Upload, FileAudio, Volume2, Trash2, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+
+type Status = "idle" | "recording" | "processing" | "success" | "error";
 
 const SessionWorkspace = () => {
   const { toast } = useToast();
-  const [isRecording, setIsRecording] = useState(false);
+  const [status, setStatus] = useState<Status>("idle");
   const [timer, setTimer] = useState("00:00");
   const [notes, setNotes] = useState("");
-  const [hasFinishedRecording, setHasFinishedRecording] = useState(false);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [finalDuration, setFinalDuration] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
 
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isRecording) {
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleStartRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorderRef.current = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+
+      mediaRecorderRef.current.ondataavailable = (event) => {
+        audioChunksRef.current.push(event.data);
+      };
+
+      mediaRecorderRef.current.onstop = () => {
+        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        setAudioBlob(blob);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorderRef.current.start();
+      setStatus("recording");
+
       const startTime = Date.now();
-      interval = setInterval(() => {
+      timerIntervalRef.current = setInterval(() => {
         const elapsed = Date.now() - startTime;
         const minutes = Math.floor(elapsed / 60000);
         const seconds = Math.floor((elapsed % 60000) / 1000);
         setTimer(`${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
       }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [isRecording]);
 
-  const handleStartRecording = () => {
-    setIsRecording(true);
-    setHasFinishedRecording(false);
-    setTimer("00:00");
-    // TODO: Implement actual recording logic
+    } catch (err) {
+      toast({
+        title: "Error de Permiso",
+        description: "No se pudo acceder al micrófono. Por favor, comprueba los permisos en tu navegador.",
+        variant: "destructive",
+      });
+      console.error("Error accessing microphone:", err);
+    }
   };
 
   const handleStopRecording = () => {
-    setIsRecording(false);
-    setFinalDuration(timer);
-    setHasFinishedRecording(true);
-    // TODO: Implement stop recording logic
+    if (mediaRecorderRef.current && status === "recording") {
+      mediaRecorderRef.current.stop();
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      setFinalDuration(timer);
+      setStatus("idle");
+    }
   };
 
   const handleDeleteRecording = () => {
-    setHasFinishedRecording(false);
+    setAudioBlob(null);
     setTimer("00:00");
     setFinalDuration("");
   };
 
   const handleGenerateReport = async () => {
-    setIsGenerating(true);
-    toast({ title: "Generando informe...", description: "Este proceso puede tardar unos segundos." });
+    if (!audioBlob) {
+      toast({ title: "Error", description: "No hay ninguna grabación para procesar.", variant: "destructive" });
+      return;
+    }
+
+    setStatus("processing");
+    toast({ title: "Procesando...", description: "Generando informe con IA. Esto puede tardar unos segundos." });
+
     try {
-      // Get provider token from Supabase
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !sessionData.session?.provider_token) {
-        throw new Error("No se pudo obtener el token de proveedor de Google.");
-      }
-      const provider_token = sessionData.session.provider_token;
+      const formData = new FormData();
+      formData.append("audioFile", audioBlob, "session_recording.webm");
+      formData.append("sessionNotes", notes);
+      // formData.append("previousReport", previousReport); // Add this if you have a previous report
 
-      // Call OpenRouter to generate the report
-      const openRouterResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${"YOUR_OPEN_ROUTER_API_KEY"}`, // Replace with your OpenRouter API key
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          "model": "google/gemini-pro",
-          "messages": [
-            { "role": "system", "content": "Eres un asistente de psicología que genera informes de sesión." },
-            { "role": "user", "content": `Genera un informe de sesión basado en las siguientes notas: ${notes}` }
-          ]
-        })
+      const { data, error } = await supabase.functions.invoke('informe-inteligente', {
+        body: formData,
       });
 
-      if (!openRouterResponse.ok) {
-        throw new Error("Error al generar el informe con OpenRouter.");
+      if (error) {
+        throw new Error(error.message);
       }
 
-      const reportData = await openRouterResponse.json();
-      const reportContent = reportData.choices[0].message.content;
+      console.log("Informe generado:", data.report);
+      setStatus("success");
+      toast({ title: "Éxito", description: "El informe ha sido generado y guardado." });
 
-      // Save the report to Google Drive
-      await new Promise((resolve, reject) => {
-        gapi.load('client', () => {
-          gapi.client.init({
-            apiKey: 'YOUR_GOOGLE_API_KEY', // Replace with your Google API Key
-            discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"],
-          }).then(resolve).catch(reject);
-        });
+    } catch (err) {
+      setStatus("error");
+      const errorMessage = (err as Error).message || "Ocurrió un error desconocido.";
+      toast({
+        title: "Error al generar informe",
+        description: errorMessage,
+        variant: "destructive",
       });
-      gapi.client.setToken({ access_token: provider_token });
-
-      const driveResponse = await gapi.client.drive.files.create({
-        resource: {
-          name: `Informe de Sesión - ${new Date().toLocaleDateString()}.txt`,
-          mimeType: 'text/plain'
-        },
-        media: {
-          mimeType: 'text/plain',
-          body: reportContent
-        }
-      });
-
-      if (!driveResponse.result.id) {
-        throw new Error("No se pudo guardar el informe en Google Drive.");
-      }
-
-      toast({ title: "Informe generado", description: "El informe se ha guardado en tu Google Drive." });
-
-    } catch (error) {
-      console.error("Error al generar el informe:", error);
-      toast({ title: "Error", description: (error as Error).message, variant: "destructive" });
-    } finally {
-      setIsGenerating(false);
+      console.error("Error invoking edge function:", err);
     }
   };
 
+  const isRecording = status === "recording";
+  const isProcessing = status === "processing";
+  const hasFinishedRecording = audioBlob !== null;
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Global Header for consistency */}
       <NavigationHeader />
-
-      {/* Main content - centered single column */}
       <main className="container mx-auto px-6 py-12 max-w-4xl">
         <div className="space-y-8">
-          {/* Page Header - Context */}
           <div className="text-center">
             <h1 className="font-serif text-3xl font-medium text-foreground">
               Registrando Sesión para: Paz García - 22 de julio de 2025
             </h1>
           </div>
 
-          {/* Recording Control Bar */}
           <div className="bg-card border border-module-border rounded-lg p-6">
             <div className="flex items-center justify-between">
-              {/* Action Buttons */}
               <div className="flex items-center space-x-3">
                 {!isRecording ? (
-                  <Button 
-                    onClick={handleStartRecording}
-                  >
+                  <Button onClick={handleStartRecording} disabled={isProcessing}>
                     <Play className="mr-2 h-4 w-4" />
                     Empezar Grabación
                   </Button>
                 ) : (
-                  <Button 
-                    onClick={handleStopRecording}
-                    variant="destructive"
-                  >
+                  <Button onClick={handleStopRecording} variant="destructive">
                     <Square className="mr-2 h-4 w-4" />
                     Parar
                   </Button>
                 )}
               </div>
 
-              {/* Status Indicator - Only when recording */}
               {isRecording && (
                 <div className="flex items-center space-x-2 text-destructive font-medium">
                   <div className="w-2 h-2 bg-destructive rounded-full animate-pulse"></div>
@@ -169,7 +152,6 @@ const SessionWorkspace = () => {
             </div>
           </div>
 
-          {/* Finished Recording Component - Only appears after stopping */}
           {hasFinishedRecording && (
             <Card className="p-6 border border-module-border">
               <div className="flex items-center justify-between">
@@ -177,20 +159,22 @@ const SessionWorkspace = () => {
                   <Volume2 className="h-5 w-5 text-muted-foreground" />
                   <div>
                     <div className="font-medium text-foreground">
-                      Grabación de la sesión.mp3 ({finalDuration})
+                      Grabación de la sesión ({finalDuration})
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <Button variant="secondary" size="sm">
+                  <Button variant="secondary" size="sm" onClick={() => {
+                    if (audioBlob) {
+                      const audioUrl = URL.createObjectURL(audioBlob);
+                      const audio = new Audio(audioUrl);
+                      audio.play();
+                    }
+                  }}>
                     <Play className="mr-2 h-4 w-4" />
                     Escuchar
                   </Button>
-                  <Button 
-                    variant="secondary" 
-                    size="sm"
-                    onClick={handleDeleteRecording}
-                  >
+                  <Button variant="secondary" size="sm" onClick={handleDeleteRecording}>
                     <Trash2 className="mr-2 h-4 w-4" />
                     Eliminar
                   </Button>
@@ -199,52 +183,42 @@ const SessionWorkspace = () => {
             </Card>
           )}
 
-          {/* Session Notes Area */}
           <div className="space-y-4">
             <h2 className="font-serif text-xl font-medium text-foreground">
               Notas de Sesión
             </h2>
-            <Textarea 
+            <Textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Escribe aquí tus notas. El sistema las sincronizará automáticamente con la grabación."
+              placeholder="Escribe aquí tus notas..."
               className="min-h-[400px] text-base resize-none font-sans"
+              disabled={isProcessing}
             />
           </div>
 
-          {/* Additional Files Section */}
-          <div className="space-y-4">
-            <h3 className="font-serif text-lg font-medium text-foreground">
-              Adjuntar Archivos Adicionales (Opcional)
-            </h3>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Button variant="secondary" className="flex-1 sm:flex-none">
-                <FileAudio className="mr-2 h-4 w-4" />
-                Subir archivo de audio
-              </Button>
-              <Button variant="secondary" className="flex-1 sm:flex-none">
-                <Upload className="mr-2 h-4 w-4" />
-                Subir archivo de notas
-              </Button>
-            </div>
-          </div>
-
-          {/* Final Action Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center pt-8">
-            <Button 
+            <Button
               variant="secondary"
-              size="lg" 
-              className="h-12 px-8 text-base font-medium bg-primary text-primary-foreground hover:bg-background hover:text-foreground border hover:border-primary transition-calm"
+              size="lg"
+              className="h-12 px-8 text-base font-medium"
+              disabled={isProcessing}
             >
               Guardar Borrador
             </Button>
-            <Button 
-              size="lg" 
+            <Button
+              size="lg"
               className="h-12 px-8 text-base font-medium"
               onClick={handleGenerateReport}
-              disabled={isGenerating}
+              disabled={!hasFinishedRecording || isProcessing}
             >
-              {isGenerating ? "Generando..." : "Generar Informe con IA"}
+              {isProcessing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Generando...
+                </>
+              ) : (
+                "Generar Informe con IA"
+              )}
             </Button>
           </div>
         </div>

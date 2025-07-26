@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/supabaseClient";
 import { Camera, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ const MyAccount = () => {
     clinic_name: "",
     avatar_url: "",
   });
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -64,7 +65,39 @@ const MyAccount = () => {
         toast({ title: "Error", description: "No se pudo actualizar el perfil.", variant: "destructive" });
       } else {
         toast({ title: "Éxito", description: "Perfil actualizado correctamente." });
-        // Optionally re-fetch profile to confirm changes
+        const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+        setProfile(data);
+      }
+    }
+  };
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 1024 * 1024) {
+      toast({ title: "Error", description: "El archivo no debe exceder 1MB.", variant: "destructive" });
+      return;
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const filePath = `${user.id}/${Date.now()}`;
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, file);
+
+      if (uploadError) {
+        toast({ title: "Error", description: "No se pudo subir la imagen.", variant: "destructive" });
+        return;
+      }
+
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath);
+      setFormData({ ...formData, avatar_url: publicUrl });
+
+      const { error: updateError } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
+      if (updateError) {
+        toast({ title: "Error", description: "No se pudo actualizar el perfil.", variant: "destructive" });
+      } else {
+        toast({ title: "Éxito", description: "Foto de perfil actualizada." });
         const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
         setProfile(data);
       }
@@ -106,6 +139,13 @@ const MyAccount = () => {
               </CardHeader>
               <CardContent className="space-y-6">
                 <form onSubmit={handleProfileUpdate}>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleAvatarChange}
+                    className="hidden"
+                    accept="image/*"
+                  />
                   {/* Avatar Upload */}
                   <div className="flex flex-col items-center space-y-4">
                     <div className="relative">
@@ -117,14 +157,21 @@ const MyAccount = () => {
                         />
                       </div>
                       <Button
+                        type="button"
                         size="icon"
                         variant="secondary"
                         className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full"
+                        onClick={() => fileInputRef.current?.click()}
                       >
                         <Camera className="h-4 w-4" />
                       </Button>
                     </div>
-                    <Button variant="outline" className="font-sans">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="font-sans"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
                       Cambiar Foto de Perfil
                     </Button>
                   </div>

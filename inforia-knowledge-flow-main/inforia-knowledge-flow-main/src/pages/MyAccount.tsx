@@ -16,6 +16,12 @@ const MyAccount = () => {
   const [activeTab, setActiveTab] = useState("professional");
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<any>(null);
+  const [formData, setFormData] = useState({
+    full_name: "",
+    collegiate_number: "",
+    clinic_name: "",
+    avatar_url: "",
+  });
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -31,6 +37,12 @@ const MyAccount = () => {
           toast({ title: "Error", description: "No se pudo cargar el perfil.", variant: "destructive" });
         } else {
           setProfile(data);
+          setFormData({
+            full_name: data.full_name || "",
+            collegiate_number: data.collegiate_number || "",
+            clinic_name: data.clinic_name || "",
+            avatar_url: data.avatar_url || "",
+          });
         }
       }
       setLoading(false);
@@ -38,15 +50,23 @@ const MyAccount = () => {
     fetchProfile();
   }, [toast]);
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { id, value } = e.target;
+    setFormData((prev) => ({ ...prev, [id]: value }));
+  };
+
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      const { error } = await supabase.from('profiles').update(profile).eq('id', user.id);
+      const { error } = await supabase.from('profiles').update(formData).eq('id', user.id);
       if (error) {
         toast({ title: "Error", description: "No se pudo actualizar el perfil.", variant: "destructive" });
       } else {
         toast({ title: "Éxito", description: "Perfil actualizado correctamente." });
+        // Optionally re-fetch profile to confirm changes
+        const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+        setProfile(data);
       }
     }
   };
@@ -91,7 +111,7 @@ const MyAccount = () => {
                     <div className="relative">
                       <div className="w-24 h-24 bg-muted rounded-full flex items-center justify-center overflow-hidden">
                         <img
-                          src={profile?.avatar_url || "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158"}
+                          src={formData.avatar_url || "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158"}
                           alt="Profile"
                           className="w-full h-full object-cover"
                         />
@@ -115,8 +135,8 @@ const MyAccount = () => {
                       <Label htmlFor="full_name" className="font-sans">Nombre Completo</Label>
                       <Input
                         id="full_name"
-                        value={profile?.full_name || ""}
-                        onChange={(e) => setProfile({ ...profile, full_name: e.target.value })}
+                        value={formData.full_name}
+                        onChange={handleInputChange}
                         className="font-sans"
                       />
                     </div>
@@ -125,8 +145,8 @@ const MyAccount = () => {
                       <Label htmlFor="collegiate_number" className="font-sans">Nº de Colegiado</Label>
                       <Input
                         id="collegiate_number"
-                        value={profile?.collegiate_number || ""}
-                        onChange={(e) => setProfile({ ...profile, collegiate_number: e.target.value })}
+                        value={formData.collegiate_number}
+                        onChange={handleInputChange}
                         className="font-sans"
                       />
                     </div>
@@ -135,8 +155,8 @@ const MyAccount = () => {
                       <Label htmlFor="clinic_name" className="font-sans">Nombre de la Consulta</Label>
                       <Input
                         id="clinic_name"
-                        value={profile?.clinic_name || ""}
-                        onChange={(e) => setProfile({ ...profile, clinic_name: e.target.value })}
+                        value={formData.clinic_name}
+                        onChange={handleInputChange}
                         className="font-sans"
                       />
                     </div>

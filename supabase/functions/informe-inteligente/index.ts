@@ -3,34 +3,26 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
-// PRINCIPIO #2: Externalizamos el prompt para poder modificarlo sin redesplegar.
+// ¡CAMBIO CLAVE! Importamos el prompt desde el archivo externo.
 import SYSTEM_PROMPT from '../_shared/system_prompt.md';
 
 // --- Constantes de Configuración ---
-// Facilita la actualización de modelos en el futuro.
 const OPENROUTER_API_URL_TRANSCRIPTIONS = "https://openrouter.ai/api/v1/audio/transcriptions";
 const OPENROUTER_API_URL_COMPLETIONS = "https://openrouter.ai/api/v1/chat/completions";
 const TRANSCRIPTION_MODEL = "openai/whisper-1";
-const REPORT_GENERATION_MODEL = "claude-3-haiku";
-const HTTP_REFERER = "https://inforia.app"; // O el dominio de desarrollo/producción
+const REPORT_GENERATION_MODEL = "openai/gpt-4o-mini";
+const HTTP_REFERER = "https://inforia.app";
 const X_TITLE = "iNFORiA SaaS";
 
-/**
- * Transcribe un archivo de audio utilizando la API de OpenRouter.
- * @param audioFile - El archivo de audio a transcribir.
- * @returns La transcripción en formato de texto.
- */
 async function transcribeAudio(audioFile: File): Promise<string> {
   const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
   if (!OPENROUTER_API_KEY) {
     console.error("OPENROUTER_API_KEY is not set in environment variables.");
     throw new Error("Configuration error: OpenRouter API key is missing.");
   }
-
   const formData = new FormData();
   formData.append("file", audioFile);
   formData.append("model", TRANSCRIPTION_MODEL);
-
   try {
     const response = await fetch(OPENROUTER_API_URL_TRANSCRIPTIONS, {
       method: "POST",
@@ -41,13 +33,11 @@ async function transcribeAudio(audioFile: File): Promise<string> {
       },
       body: formData,
     });
-
     if (!response.ok) {
         const errorBody = await response.text();
         console.error(`OpenRouter transcription API responded with status: ${response.status}`, errorBody);
         throw new Error(`AI service failed during transcription. Status: ${response.status}`);
     }
-
     const data = await response.json();
     if (!data.text) {
         console.error("OpenRouter transcription response did not contain text.", data);
@@ -56,31 +46,21 @@ async function transcribeAudio(audioFile: File): Promise<string> {
     return data.text;
   } catch (error) {
     console.error("Error calling OpenRouter for transcription:", error.message);
-    // Relanzamos el error para que el manejador principal lo capture.
     throw error;
   }
 }
 
-/**
- * Genera un informe clínico utilizando la API de OpenRouter.
- * @param transcription - La transcripción de la sesión.
- * @param sessionNotes - Las notas del terapeuta.
- * @param previousReport - (Opcional) El informe de la sesión anterior.
- * @returns El informe clínico generado en formato Markdown.
- */
 async function generateReport(transcription: string, sessionNotes: string, previousReport?: string): Promise<string> {
     const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
     if (!OPENROUTER_API_KEY) {
         console.error("OPENROUTER_API_KEY is not set in environment variables.");
         throw new Error("Configuration error: OpenRouter API key is missing.");
     }
-
   const user_prompt = `
     Transcripción de la sesión:
     ---
     ${transcription}
     ---
-
     Notas adicionales del terapeuta:
     ---
     ${sessionNotes}
@@ -92,7 +72,6 @@ async function generateReport(transcription: string, sessionNotes: string, previ
     ---
     ` : ''}
   `;
-
   try {
     const response = await fetch(OPENROUTER_API_URL_COMPLETIONS, {
       method: "POST",
@@ -112,13 +91,11 @@ async function generateReport(transcription: string, sessionNotes: string, previ
         max_tokens: 2000,
       }),
     });
-
     if (!response.ok) {
       const errorBody = await response.text();
       console.error(`OpenRouter completions API responded with status: ${response.status}`, errorBody);
       throw new Error(`AI service failed during report generation. Status: ${response.status}`);
     }
-
     const data = await response.json();
     if (!data.choices || !data.choices[0] || !data.choices[0].message || !data.choices[0].message.content) {
         console.error("OpenRouter completions response was invalid.", data);
@@ -131,27 +108,21 @@ async function generateReport(transcription: string, sessionNotes: string, previ
   }
 }
 
-
 serve(async (req) => {
-  // Manejo de la petición preflight para CORS
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
-
   try {
-    // 1. --- Validación de Método y Autenticación ---
     if (req.method !== 'POST') {
       return new Response(JSON.stringify({ error: "Method Not Allowed." }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 405,
       });
     }
-
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
-
     const authToken = req.headers.get('Authorization')?.replace('Bearer ', '');
     if (!authToken) {
         return new Response(JSON.stringify({ error: "Authentication token is missing." }), {
@@ -159,23 +130,17 @@ serve(async (req) => {
             status: 401,
         });
     }
-
     const { data: { user } } = await supabaseAdmin.auth.getUser(authToken);
-
     if (!user) {
       return new Response(JSON.stringify({ error: "Authentication failed. Invalid JWT." }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 401,
       });
     }
-
-    // 2. --- Validación del FormData ---
     const formData = await req.formData();
     const audioFile = formData.get("audioFile");
     const sessionNotes = formData.get("sessionNotes");
-    const previousReport = formData.get("previousReport"); // Puede ser null
-
-    // Validamos que los campos requeridos no solo existan, sino que sean del tipo correcto.
+    const previousReport = formData.get("previousReport");
     if (!(audioFile instanceof File)) {
         return new Response(JSON.stringify({ error: "Invalid or missing field: 'audioFile' must be a file." }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -188,31 +153,22 @@ serve(async (req) => {
             status: 400,
         });
     }
-    // \`previousReport\` es opcional, pero si existe, debe ser un string.
     if (previousReport !== null && typeof previousReport !== 'string') {
         return new Response(JSON.stringify({ error: "Invalid field type: 'previousReport' must be a string if provided." }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
             status: 400,
         });
     }
-
-    // 3. --- Ejecución del Flujo Principal ---
     const transcription = await transcribeAudio(audioFile);
     const report = await generateReport(transcription, sessionNotes, previousReport || undefined);
-
-    // 4. --- Respuesta Exitosa ---
     return new Response(JSON.stringify({ report }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });
-
   } catch (error) {
-    // 5. --- Manejador de Errores Global ---
     console.error("Unhandled error in Edge Function:", error);
     return new Response(JSON.stringify({ error: error.message || "An unexpected error occurred." }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
-      // Usamos 502 (Bad Gateway) si el error viene de un servicio externo como OpenRouter
-      // o 500 si es un error interno.
       status: error.message.includes("AI service failed") ? 502 : 500,
     });
   }

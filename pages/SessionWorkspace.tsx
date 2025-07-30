@@ -1,12 +1,11 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/supabaseClient";
-import { gapi } from "gapi-script";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { NavigationHeader } from "@/components/NavigationHeader";
 import { Play, Square, Upload, FileAudio, Volume2, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { generateIntelligentReport } from "../src/services/reportApi";
 
 const SessionWorkspace = () => {
   const { toast } = useToast();
@@ -16,6 +15,7 @@ const SessionWorkspace = () => {
   const [hasFinishedRecording, setHasFinishedRecording] = useState(false);
   const [finalDuration, setFinalDuration] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -42,77 +42,46 @@ const SessionWorkspace = () => {
     setIsRecording(false);
     setFinalDuration(timer);
     setHasFinishedRecording(true);
-    // TODO: Implement stop recording logic
+    // This is a placeholder for the actual audio file
+    const dummyAudioFile = new File(["dummy audio data"], "session_recording.mp3", { type: "audio/mpeg" });
+    setAudioFile(dummyAudioFile);
+    // TODO: Implement stop recording logic and get the actual audio file
   };
 
   const handleDeleteRecording = () => {
     setHasFinishedRecording(false);
     setTimer("00:00");
     setFinalDuration("");
+    setAudioFile(null);
   };
 
   const handleGenerateReport = async () => {
+    if (!audioFile) {
+      toast({
+        title: "Error",
+        description: "No hay archivo de audio para generar el informe.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!notes.trim()) {
+      toast({
+        title: "Error",
+        description: "Las notas de la sesión no pueden estar vacías.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsGenerating(true);
     toast({ title: "Generando informe...", description: "Este proceso puede tardar unos segundos." });
+
     try {
-      // Get provider token from Supabase
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !sessionData.session?.provider_token) {
-        throw new Error("No se pudo obtener el token de proveedor de Google.");
-      }
-      const provider_token = sessionData.session.provider_token;
-
-      // Call OpenRouter to generate the report
-      const openRouterResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${"YOUR_OPEN_ROUTER_API_KEY"}`, // Replace with your OpenRouter API key
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          "model": "google/gemini-pro",
-          "messages": [
-            { "role": "system", "content": "Eres un asistente de psicología que genera informes de sesión." },
-            { "role": "user", "content": `Genera un informe de sesión basado en las siguientes notas: ${notes}` }
-          ]
-        })
-      });
-
-      if (!openRouterResponse.ok) {
-        throw new Error("Error al generar el informe con OpenRouter.");
-      }
-
-      const reportData = await openRouterResponse.json();
-      const reportContent = reportData.choices[0].message.content;
-
-      // Save the report to Google Drive
-      await new Promise((resolve, reject) => {
-        gapi.load('client', () => {
-          gapi.client.init({
-            apiKey: 'YOUR_GOOGLE_API_KEY', // Replace with your Google API Key
-            discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"],
-          }).then(resolve).catch(reject);
-        });
-      });
-      gapi.client.setToken({ access_token: provider_token });
-
-      const driveResponse = await gapi.client.drive.files.create({
-        resource: {
-          name: `Informe de Sesión - ${new Date().toLocaleDateString()}.txt`,
-          mimeType: 'text/plain'
-        },
-        media: {
-          mimeType: 'text/plain',
-          body: reportContent
-        }
-      });
-
-      if (!driveResponse.result.id) {
-        throw new Error("No se pudo guardar el informe en Google Drive.");
-      }
-
-      toast({ title: "Informe generado", description: "El informe se ha guardado en tu Google Drive." });
-
+      const { report } = await generateIntelligentReport(audioFile, notes);
+      toast({ title: "Informe generado", description: "El informe se ha generado correctamente." });
+      // TODO: Display the generated report to the user
+      console.log("Generated Report:", report);
     } catch (error) {
       console.error("Error al generar el informe:", error);
       toast({ title: "Error", description: (error as Error).message, variant: "destructive" });

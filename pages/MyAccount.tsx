@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from "react";
-import { supabase } from "@/integrations/supabase/supabaseClient";
+import { supabase } from "@/integrations/supabase/client";
 import { Camera, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

@@ -11,7 +11,7 @@ import SYSTEM_PROMPT from '../_shared/system_prompt.md';
 const OPENROUTER_API_URL_TRANSCRIPTIONS = "https://openrouter.ai/api/v1/audio/transcriptions";
 const OPENROUTER_API_URL_COMPLETIONS = "https://openrouter.ai/api/v1/chat/completions";
 const TRANSCRIPTION_MODEL = "openai/whisper-1";
-const REPORT_GENERATION_MODEL = "openai/gpt-4o-mini";
+const REPORT_GENERATION_MODEL = "claude-3-haiku";
 const HTTP_REFERER = "https://inforia.app"; // O el dominio de desarrollo/producción
 const X_TITLE = "iNFORiA SaaS";
 

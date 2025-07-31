@@ -1,15 +1,51 @@
 {
-  "name": "vite_react_shadcn_ts",
+  "name": "inforia",
+  "description": "Plataforma integral de gestión clínica con IA",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
+    "build:prod": "vite build --mode production",
+    "preview": "vite preview",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "lint:fix": "eslint . --fix",
+    "type-check": "tsc --noEmit",
+    "check-env": "node scripts/check-env.js",
+    "setup": "npm run check-env && npm run dev",
+    "test": "echo \"No tests specified yet\"",
+    "test:watch": "echo \"No tests specified yet\"",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:status": "supabase status",
+    "supabase:db:push": "supabase db push",
+    "supabase:db:reset": "supabase db reset",
+    "supabase:functions:deploy": "supabase functions deploy",
+    "postinstall": "echo \"✅ Dependencias instaladas. Ejecuta 'npm run check-env' para verificar la configuración.\""
   },
+  "keywords": [
+    "react",
+    "typescript",
+    "vite",
+    "supabase",
+    "openrouter",
+    "ai",
+    "healthcare",
+    "clinical-management",
+    "therapy"
+  ],
+  "author": "INFORIA Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tu-usuario/inforia.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tu-usuario/inforia/issues"
+  },
+  "homepage": "https://inforia.app",
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
     "@radix-ui/react-accordion": "^1.2.0",
@@ -55,6 +91,7 @@
     "react-hook-form": "^7.53.0",
     "react-resizable-panels": "^2.1.3",
     "react-router-dom": "^6.26.2",
+    "react-markdown": "^9.0.1",
     "recharts": "^2.12.7",
     "sonner": "^1.5.0",
     "tailwind-merge": "^2.5.2",
@@ -81,5 +118,21 @@
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.0.1",
     "vite": "^5.4.1"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
   }
 }

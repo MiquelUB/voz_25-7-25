@@ -1,146 +1,173 @@
 // src/pages/SessionWorkspace.tsx
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
-
-// ¡CAMBIO CLAVE! Importamos nuestro servicio de API centralizado.
-import { generateIntelligentReport } from "@/services/reportApi";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Play, Square, Mic, Trash2, Headphones } from "lucide-react";
+import DashboardHeader from "@/components/DashboardHeader";
 
 export default function SessionWorkspace() {
-  const { toast } = useToast();
+  const [isRecording, setIsRecording] = useState(false);
+  const [timer, setTimer] = useState("00:00");
+  const [notes, setNotes] = useState("");
+  const [hasFinishedRecording, setHasFinishedRecording] = useState(false);
+  const [finalDuration, setFinalDuration] = useState("");
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
 
-  // --- Estados para los datos del formulario ---
-  const [audioFile, setAudioFile] = useState<File | null>(null);
-  const [sessionNotes, setSessionNotes] = useState("");
-  const [previousReport, setPreviousReport] = useState("");
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const recordingStartTimeRef = useRef<number>(0);
 
-  // --- Estados para controlar la UI durante la llamada a la API ---
-  const [isLoading, setIsLoading] = useState(false);
-  const [generatedReport, setGeneratedReport] = useState("");
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files && event.target.files[0]) {
-      setAudioFile(event.target.files[0]);
-    }
-  };
-
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-
-    if (!audioFile || !sessionNotes.trim()) {
-      toast({
-        title: "Faltan datos",
-        description: "Por favor, sube un archivo de audio y añade tus notas de la sesión.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsLoading(true);
-    setGeneratedReport("");
-
+  const handleStartRecording = async () => {
     try {
-      // Usamos nuestra nueva función del servicio.
-      const result = await generateIntelligentReport(
-        audioFile,
-        sessionNotes,
-        previousReport
-      );
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorderRef.current = new MediaRecorder(stream);
+      const chunks: Blob[] = [];
 
-      if (result && result.report) {
-          setGeneratedReport(result.report);
-          toast({
-            title: "Informe generado con éxito",
-            description: "El informe inteligente está listo para tu revisión.",
-          });
-      } else {
-          throw new Error("La respuesta del servidor no tuvo el formato esperado.");
-      }
+      mediaRecorderRef.current.ondataavailable = (event) => {
+        chunks.push(event.data);
+      };
 
+      mediaRecorderRef.current.onstop = () => {
+        const blob = new Blob(chunks, { type: "audio/webm" });
+        setAudioBlob(blob);
+        setHasFinishedRecording(true);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorderRef.current.start();
+      setIsRecording(true);
+      setHasFinishedRecording(false);
+      setAudioBlob(null);
+      recordingStartTimeRef.current = Date.now();
+      timerIntervalRef.current = setInterval(() => {
+        const elapsed = Date.now() - recordingStartTimeRef.current;
+        const minutes = Math.floor(elapsed / 60000);
+        const seconds = Math.floor((elapsed % 60000) / 1000);
+        const formattedTime = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+        setTimer(formattedTime);
+        setFinalDuration(formattedTime);
+      }, 1000);
     } catch (error) {
-      console.error("Error en handleSubmit:", error);
-      toast({
-        title: "Error al generar el informe",
-        description: error instanceof Error ? error.message : "Ha ocurrido un error inesperado.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
+      console.error("Error starting recording:", error);
+      // Here you might want to show a toast to the user
     }
   };
+
+  const handleStopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
+    }
+  };
+
+  const handlePlayAudio = () => {
+    if (audioBlob) {
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      audio.play();
+    }
+  };
+
+  const handleDeleteAudio = () => {
+    setAudioBlob(null);
+    setHasFinishedRecording(false);
+    setTimer("00:00");
+    setFinalDuration("");
+  };
+
+  useEffect(() => {
+    return () => {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
+    };
+  }, []);
 
   return (
-    <div className="container mx-auto p-4 md:p-8">
-      <h1 className="text-3xl font-bold mb-6">Espacio de Trabajo de la Sesión</h1>
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Columna de Entradas */}
-          <div className="space-y-6">
-            <div>
-              <Label htmlFor="audio-file" className="text-lg font-semibold">1. Archivo de Audio de la Sesión</Label>
-              <Input id="audio-file" type="file" accept="audio/*" onChange={handleFileChange} disabled={isLoading} required />
-            </div>
-            <div>
-              <Label htmlFor="session-notes" className="text-lg font-semibold">2. Notas Adicionales del Terapeuta</Label>
-              <Textarea
-                id="session-notes"
-                placeholder="Añade aquí tus notas, observaciones o cualquier dato relevante de la sesión..."
-                value={sessionNotes}
-                onChange={(e) => setSessionNotes(e.target.value)}
-                rows={10}
-                disabled={isLoading}
-                required
-              />
-            </div>
-            <div>
-              <Label htmlFor="previous-report" className="text-lg font-semibold">3. Informe Anterior (Opcional)</Label>
-              <Textarea
-                id="previous-report"
-                placeholder="Pega aquí el contenido del informe anterior para un análisis evolutivo..."
-                value={previousReport}
-                onChange={(e) => setPreviousReport(e.target.value)}
-                rows={10}
-                disabled={isLoading}
-              />
-            </div>
-          </div>
+    <div className="container mx-auto max-w-4xl p-6 space-y-8">
+      <DashboardHeader />
 
-          {/* Columna de Resultados */}
-          <div className="space-y-6">
-            <div>
-                <Label className="text-lg font-semibold">4. Informe Inteligente Generado</Label>
-                <div className="prose border rounded-md p-4 bg-gray-50 min-h-[300px]">
-                    {isLoading ? (
-                        <div className="flex items-center justify-center h-full">
-                            <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
-                            <p className="ml-2">Generando informe...</p>
-                        </div>
-                    ) : (
-                        <p style={{ whiteSpace: 'pre-wrap' }}>{generatedReport || "El informe aparecerá aquí una vez generado."}</p>
-                    )}
+      <div className="text-center">
+        <h1 className="text-4xl font-serif font-bold">Registro de Sesión</h1>
+        <p className="text-lg text-gray-600">Graba, toma notas y genera informes de manera integrada.</p>
+      </div>
+
+      <Card className="bg-white shadow-lg">
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <Mic className="h-6 w-6 text-gray-700" />
+              <span className="font-sans text-xl">Control de Grabación</span>
+            </div>
+            <div className={`flex items-center space-x-2 ${isRecording ? 'text-red-600' : 'text-gray-500'}`}>
+              {isRecording && <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span>
+              </span>}
+              <span className="font-mono text-2xl">{timer}</span>
+            </div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col items-center space-y-6 pt-6">
+          {!isRecording ? (
+            <Button size="lg" style={{ backgroundColor: '#2E403B', color: 'white' }} onClick={handleStartRecording} disabled={hasFinishedRecording && !isRecording}>
+              <Play className="mr-2 h-5 w-5" />
+              Empezar Grabación
+            </Button>
+          ) : (
+            <Button size="lg" variant="destructive" style={{ backgroundColor: '#800020' }} onClick={handleStopRecording}>
+              <Square className="mr-2 h-5 w-5" />
+              Parar Grabación
+            </Button>
+          )}
+
+          {hasFinishedRecording && (
+            <Card className="w-full bg-gray-50">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="font-semibold">Grabación finalizada</p>
+                  <p className="text-sm text-gray-500">Duración: {finalDuration}</p>
                 </div>
-            </div>
-          </div>
-        </div>
+                <div className="flex items-center space-x-2">
+                  <Button variant="outline" size="icon" onClick={handlePlayAudio}>
+                    <Headphones className="h-5 w-5" />
+                  </Button>
+                  <Button variant="outline" size="icon" onClick={handleDeleteAudio}>
+                    <Trash2 className="h-5 w-5 text-red-600" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </CardContent>
+      </Card>
 
-        <div className="flex justify-end">
-          <Button type="submit" disabled={isLoading}>
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Generando...
-              </>
-            ) : (
-              "Generar Informe Inteligente"
-            )}
-          </Button>
-        </div>
-      </form>
+      <Card className="bg-white shadow-lg">
+        <CardHeader>
+          <CardTitle className="font-sans text-xl">
+            Área de Notas
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Textarea
+            placeholder="Tus notas se guardan automáticamente a medida que escribes..."
+            className="min-h-[400px] resize-none font-sans"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </CardContent>
+      </Card>
+
+      <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <Button variant="secondary" size="lg">Guardar Borrador</Button>
+          <Button size="lg" style={{ backgroundColor: '#2E403B', color: 'white' }}>Generar Informe con IA</Button>
+      </div>
+
     </div>
   );
 }

@@ -435,7 +435,7 @@ export default function SessionWorkspace() {
                   <Button variant="outline" size="icon" onClick={handlePlayAudio}>
                     <Headphones className="h-5 w-5" />
                   </Button>
-                  <Button variant="outline" size="icon" onClick={handleDeleteAudio}>
+                  <Button variant="outline" size="icon" onClick={handleDeleteAudio} aria-label="delete audio">
                     <Trash2 className="h-5 w-5 text-red-600" />
                   </Button>
                 </div>
@@ -474,6 +474,7 @@ export default function SessionWorkspace() {
             onChange={handleAudioFileChange}
             accept="audio/*"
             style={{ display: 'none' }}
+            data-testid="audio-input"
           />
           <input
             type="file"
@@ -481,6 +482,7 @@ export default function SessionWorkspace() {
             onChange={handleNotesFileChange}
             accept=".txt,.md"
             style={{ display: 'none' }}
+            data-testid="notes-input"
           />
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Button variant="secondary" className="w-full sm:w-auto" onClick={handleAttachAudioClick}>
@@ -532,7 +534,7 @@ export default function SessionWorkspace() {
           "Guardar Borrador"
         )}
       </Button>
-      <Button size="lg" style={{ backgroundColor: '#2E403B', color: 'white' }} onClick={handleGenerateReport} disabled={isLoading}>
+      <Button size="lg" style={{ backgroundColor: '#2E403B', color: 'white' }} onClick={handleGenerateReport} disabled={isLoading || !notes.trim() || !audioBlob}>
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />

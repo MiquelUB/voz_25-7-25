@@ -24,6 +24,7 @@ export default function SessionWorkspace() {
   const [isSaving, setIsSaving] = useState(false);
   const [generatedReport, setGeneratedReport] = useState<string | null>(null);
   const [savedReportId, setSavedReportId] = useState<string | null>(null);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
 
   // State for previous reports
   const [previousReports, setPreviousReports] = useState<{ id: string; name: string }[]>([]);
@@ -35,6 +36,47 @@ export default function SessionWorkspace() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const recordingStartTimeRef = useRef<number>(0);
+  const audioInputRef = useRef<HTMLInputElement>(null);
+  const notesInputRef = useRef<HTMLInputElement>(null);
+
+  // Load draft from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedNotes = localStorage.getItem('draftNotes');
+      const savedAudio = localStorage.getItem('draftAudio');
+      let draftLoaded = false;
+
+      if (savedNotes !== null) {
+        setNotes(savedNotes);
+        draftLoaded = true;
+      }
+
+      if (savedAudio) {
+        fetch(savedAudio)
+          .then(res => res.blob())
+          .then(blob => {
+            setAudioBlob(blob);
+            setHasFinishedRecording(true);
+            const audio = new Audio();
+            audio.src = URL.createObjectURL(blob);
+            audio.onloadedmetadata = () => {
+              const minutes = Math.floor(audio.duration / 60);
+              const seconds = Math.floor(audio.duration % 60);
+              const formattedTime = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+              setFinalDuration(formattedTime);
+              setTimer(formattedTime);
+            };
+          });
+        draftLoaded = true;
+      }
+
+      if (draftLoaded) {
+        toast({ title: "Borrador Cargado", description: "Se ha restaurado tu sesión anterior." });
+      }
+    } catch (error) {
+      console.error("Error loading draft from localStorage:", error);
+    }
+  }, [toast]);
 
   // Fetch previous reports on component mount
   useEffect(() => {
@@ -266,6 +308,84 @@ export default function SessionWorkspace() {
     }
   };
 
+  const handleAttachAudioClick = () => {
+    audioInputRef.current?.click();
+  };
+
+  const handleAudioFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setAudioBlob(file);
+      setHasFinishedRecording(true);
+
+      const audio = new Audio();
+      audio.src = URL.createObjectURL(file);
+      audio.onloadedmetadata = () => {
+        const minutes = Math.floor(audio.duration / 60);
+        const seconds = Math.floor(audio.duration % 60);
+        const formattedTime = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+        setFinalDuration(formattedTime);
+        setTimer(formattedTime);
+      };
+    }
+  };
+
+  const handleAttachNotesClick = () => {
+    notesInputRef.current?.click();
+  };
+
+  const handleNotesFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = e.target?.result as string;
+        setNotes(text);
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  const toBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
+  const handleSaveDraft = async () => {
+    if (!notes.trim() && !audioBlob) {
+      toast({
+        title: "Nada que guardar",
+        description: "Escribe notas o graba/adjunta audio para guardar un borrador.",
+      });
+      return;
+    }
+
+    setIsSavingDraft(true);
+    try {
+      localStorage.setItem('draftNotes', notes);
+      if (audioBlob) {
+        const base64Audio = await toBase64(audioBlob);
+        localStorage.setItem('draftAudio', base64Audio);
+      } else {
+        localStorage.removeItem('draftAudio');
+      }
+      toast({ title: "Borrador Guardado", description: "Tu progreso se ha guardado localmente." });
+    } catch (error) {
+      console.error("Error saving draft:", error);
+      toast({
+        title: "Error al Guardar Borrador",
+        description: "No se pudo guardar el borrador en el navegador.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingDraft(false);
+    }
+  };
+
   return (
     <div className="container mx-auto max-w-4xl p-6 space-y-8">
       <DashboardHeader />
@@ -348,31 +468,32 @@ export default function SessionWorkspace() {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          <input
+            type="file"
+            ref={audioInputRef}
+            onChange={handleAudioFileChange}
+            accept="audio/*"
+            style={{ display: 'none' }}
+          />
+          <input
+            type="file"
+            ref={notesInputRef}
+            onChange={handleNotesFileChange}
+            accept=".txt,.md"
+            style={{ display: 'none' }}
+          />
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Button variant="secondary" className="w-full sm:w-auto">
+            <Button variant="secondary" className="w-full sm:w-auto" onClick={handleAttachAudioClick}>
               <FileAudio className="mr-2 h-5 w-5" />
               Adjuntar Audio
             </Button>
-            <Button variant="secondary" className="w-full sm:w-auto">
+            <Button variant="secondary" className="w-full sm:w-auto" onClick={handleAttachNotesClick}>
               <FileText className="mr-2 h-5 w-5" />
               Adjuntar Notas
             </Button>
           </div>
         </CardContent>
       </Card>
-
-      <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-        <Button variant="secondary" className="w-full sm:w-auto">
-          <FileAudio className="mr-2 h-5 w-5" />
-          Adjuntar Audio
-        </Button>
-        <Button variant="secondary" className="w-full sm:w-auto">
-          <FileText className="mr-2 h-5 w-5" />
-          Adjuntar Notas
-        </Button>
-      </div>
-    </CardContent>
-  </Card>
 
   <Card className="bg-white shadow-lg">
     <CardHeader>
@@ -401,7 +522,16 @@ export default function SessionWorkspace() {
   </Card>
 
   <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-      <Button variant="secondary" size="lg">Guardar Borrador</Button>
+      <Button variant="secondary" size="lg" onClick={handleSaveDraft} disabled={isSavingDraft}>
+        {isSavingDraft ? (
+          <>
+            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+            Guardando...
+          </>
+        ) : (
+          "Guardar Borrador"
+        )}
+      </Button>
       <Button size="lg" style={{ backgroundColor: '#2E403B', color: 'white' }} onClick={handleGenerateReport} disabled={isLoading}>
             {isLoading ? (
               <>

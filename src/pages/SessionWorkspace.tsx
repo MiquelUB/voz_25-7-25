@@ -4,8 +4,12 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Play, Square, Mic, Trash2, Headphones, FileAudio, FileText } from "lucide-react";
+import { Play, Square, Mic, Trash2, Headphones, FileAudio, FileText, Loader2 } from "lucide-react";
 import DashboardHeader from "@/components/DashboardHeader";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/components/ui/use-toast";
+import { Toaster } from "@/components/ui/toaster";
+
 
 export default function SessionWorkspace() {
   const [isRecording, setIsRecording] = useState(false);
@@ -14,6 +18,9 @@ export default function SessionWorkspace() {
   const [hasFinishedRecording, setHasFinishedRecording] = useState(false);
   const [finalDuration, setFinalDuration] = useState("");
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [generatedReport, setGeneratedReport] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -87,6 +94,80 @@ export default function SessionWorkspace() {
       }
     };
   }, []);
+
+  const handleGenerateReport = async () => {
+    setIsLoading(true);
+    setGeneratedReport(null);
+
+    if (!audioBlob) {
+      toast({
+        title: "Error: No hay audio",
+        description: "Por favor, graba una sesión antes de generar un informe.",
+        variant: "destructive",
+      });
+      setIsLoading(false);
+      return;
+    }
+
+    if (!notes.trim()) {
+      toast({
+        title: "Error: No hay notas",
+        description: "Por favor, escribe algunas notas sobre la sesión.",
+        variant: "destructive",
+      });
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast({
+          title: "Error de autenticación",
+          description: "No se pudo verificar tu sesión. Por favor, inicia sesión de nuevo.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("audioFile", audioBlob, "session_audio.webm");
+      formData.append("sessionNotes", notes);
+      formData.append("previousReport", ""); // Placeholder for future use
+
+      const { data, error } = await supabase.functions.invoke("informe-inteligente", {
+        body: formData,
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        }
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data.report) {
+        setGeneratedReport(data.report);
+        toast({
+          title: "Informe Generado",
+          description: "El informe de IA se ha creado exitosamente.",
+        });
+      } else {
+         throw new Error("La respuesta de la función no contenía un informe.");
+      }
+
+    } catch (error) {
+      console.error("Error generating report:", error);
+      toast({
+        title: "Error al generar el informe",
+        description: error.message || "Ocurrió un error inesperado. Revisa la consola para más detalles.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="container mx-auto max-w-4xl p-6 space-y-8">
@@ -185,9 +266,33 @@ export default function SessionWorkspace() {
 
       <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Button variant="secondary" size="lg">Guardar Borrador</Button>
-          <Button size="lg" style={{ backgroundColor: '#2E403B', color: 'white' }}>Generar Informe con IA</Button>
+          <Button size="lg" style={{ backgroundColor: '#2E403B', color: 'white' }} onClick={handleGenerateReport} disabled={isLoading}>
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                Generando...
+              </>
+            ) : (
+              "Generar Informe con IA"
+            )}
+          </Button>
       </div>
 
+      {generatedReport && (
+        <Card className="bg-white shadow-lg">
+          <CardHeader>
+            <CardTitle className="font-sans text-xl">
+              Informe Generado por IA
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <pre className="bg-gray-100 p-4 rounded-md whitespace-pre-wrap font-sans">
+              {generatedReport}
+            </pre>
+          </CardContent>
+        </Card>
+      )}
+      <Toaster />
     </div>
   );
 }

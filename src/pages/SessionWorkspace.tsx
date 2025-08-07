@@ -4,11 +4,13 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Play, Square, Mic, Trash2, Headphones, FileAudio, FileText, Loader2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Play, Square, Mic, Trash2, Headphones, FileAudio, FileText, Loader2, Save, FileClock } from "lucide-react";
 import DashboardHeader from "@/components/DashboardHeader";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
 import { Toaster } from "@/components/ui/toaster";
+import { saveReportToDrive, listReportsFromDrive, readReportFromDrive } from "../../lib/gdrive";
 
 
 export default function SessionWorkspace() {
@@ -19,12 +21,42 @@ export default function SessionWorkspace() {
   const [finalDuration, setFinalDuration] = useState("");
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [generatedReport, setGeneratedReport] = useState<string | null>(null);
+  const [savedReportId, setSavedReportId] = useState<string | null>(null);
+
+  // State for previous reports
+  const [previousReports, setPreviousReports] = useState<{ id: string; name: string }[]>([]);
+  const [isLoadingReports, setIsLoadingReports] = useState(true);
+  const [selectedReportContent, setSelectedReportContent] = useState<string | null>(null);
+
   const { toast } = useToast();
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const recordingStartTimeRef = useRef<number>(0);
+
+  // Fetch previous reports on component mount
+  useEffect(() => {
+    const fetchReports = async () => {
+      setIsLoadingReports(true);
+      try {
+        const reports = await listReportsFromDrive();
+        setPreviousReports(reports);
+      } catch (error) {
+        console.error("Error fetching previous reports:", error);
+        toast({
+          title: "Error al Cargar Informes",
+          description: "No se pudieron cargar los informes anteriores desde Google Drive.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoadingReports(false);
+      }
+    };
+
+    fetchReports();
+  }, [toast]);
 
   const handleStartRecording = async () => {
     try {
@@ -87,6 +119,29 @@ export default function SessionWorkspace() {
     setFinalDuration("");
   };
 
+  const handleReportSelected = async (reportId: string) => {
+    if (!reportId) {
+      setSelectedReportContent(null);
+      return;
+    }
+
+    try {
+      const content = await readReportFromDrive(reportId);
+      setSelectedReportContent(content);
+      toast({
+        title: "Informe Cargado",
+        description: "El informe anterior ha sido cargado para análisis evolutivo.",
+      });
+    } catch (error) {
+      console.error("Error reading selected report:", error);
+      toast({
+        title: "Error al Cargar Informe",
+        description: "No se pudo leer el contenido del informe seleccionado.",
+        variant: "destructive",
+      });
+    }
+  };
+
   useEffect(() => {
     return () => {
       if (timerIntervalRef.current) {
@@ -98,6 +153,7 @@ export default function SessionWorkspace() {
   const handleGenerateReport = async () => {
     setIsLoading(true);
     setGeneratedReport(null);
+    setSavedReportId(null); // Reset save state when generating a new report
 
     if (!audioBlob) {
       toast({
@@ -134,7 +190,7 @@ export default function SessionWorkspace() {
       const formData = new FormData();
       formData.append("audioFile", audioBlob, "session_audio.webm");
       formData.append("sessionNotes", notes);
-      formData.append("previousReport", ""); // Placeholder for future use
+      formData.append("previousReport", selectedReportContent || "");
 
       const { data, error } = await supabase.functions.invoke("informe-inteligente", {
         body: formData,
@@ -166,6 +222,47 @@ export default function SessionWorkspace() {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSaveReport = async () => {
+    if (!generatedReport) {
+      toast({
+        title: "Error",
+        description: "No hay informe generado para guardar.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const fileName = `iNFORiA-Report-${timestamp}.txt`;
+
+      const fileId = await saveReportToDrive(fileName, generatedReport);
+
+      if (fileId) {
+        setSavedReportId(fileId);
+        // Refresh the list of reports after saving a new one
+        const updatedReports = await listReportsFromDrive();
+        setPreviousReports(updatedReports);
+        toast({
+          title: "Informe Guardado",
+          description: `El informe ha sido guardado en tu Google Drive con el nombre: ${fileName}`,
+        });
+      } else {
+        throw new Error("No se pudo obtener el ID del archivo guardado.");
+      }
+    } catch (error) {
+      console.error("Error saving report to Google Drive:", error);
+      toast({
+        title: "Error al Guardar",
+        description: "No se pudo guardar el informe en Google Drive. Revisa los permisos y la consola.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -265,8 +362,47 @@ export default function SessionWorkspace() {
       </Card>
 
       <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Button variant="secondary" size="lg">Guardar Borrador</Button>
-          <Button size="lg" style={{ backgroundColor: '#2E403B', color: 'white' }} onClick={handleGenerateReport} disabled={isLoading}>
+        <Button variant="secondary" className="w-full sm:w-auto">
+          <FileAudio className="mr-2 h-5 w-5" />
+          Adjuntar Audio
+        </Button>
+        <Button variant="secondary" className="w-full sm:w-auto">
+          <FileText className="mr-2 h-5 w-5" />
+          Adjuntar Notas
+        </Button>
+      </div>
+    </CardContent>
+  </Card>
+
+  <Card className="bg-white shadow-lg">
+    <CardHeader>
+      <CardTitle className="font-sans text-xl flex items-center space-x-3">
+        <FileClock className="h-6 w-6 text-gray-700" />
+        <span>Análisis Evolutivo (Opcional)</span>
+      </CardTitle>
+    </CardHeader>
+    <CardContent>
+       <Select onValueChange={handleReportSelected} disabled={isLoadingReports || previousReports.length === 0}>
+        <SelectTrigger>
+          <SelectValue placeholder={isLoadingReports ? "Cargando informes..." : "Seleccionar informe anterior"} />
+        </SelectTrigger>
+        <SelectContent>
+          {previousReports.map(report => (
+            <SelectItem key={report.id} value={report.id}>
+              {report.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <p className="text-sm text-gray-500 mt-2">
+        Selecciona un informe de una sesión previa para que la IA lo utilice como contexto y realice un análisis evolutivo.
+      </p>
+    </CardContent>
+  </Card>
+
+  <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+      <Button variant="secondary" size="lg">Guardar Borrador</Button>
+      <Button size="lg" style={{ backgroundColor: '#2E403B', color: 'white' }} onClick={handleGenerateReport} disabled={isLoading}>
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
@@ -281,8 +417,20 @@ export default function SessionWorkspace() {
       {generatedReport && (
         <Card className="bg-white shadow-lg">
           <CardHeader>
-            <CardTitle className="font-sans text-xl">
-              Informe Generado por IA
+            <CardTitle className="font-sans text-xl flex justify-between items-center">
+              <span>Informe Generado por IA</span>
+              <Button
+                onClick={handleSaveReport}
+                disabled={isSaving || !!savedReportId}
+                size="sm"
+              >
+                {isSaving ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="mr-2 h-4 w-4" />
+                )}
+                {savedReportId ? "Guardado" : (isSaving ? "Guardando..." : "Guardar en Drive")}
+              </Button>
             </CardTitle>
           </CardHeader>
           <CardContent>

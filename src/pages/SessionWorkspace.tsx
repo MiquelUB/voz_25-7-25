@@ -9,12 +9,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Play, Square, Mic, Trash2, Headphones, FileAudio, FileText, Loader2, Save, FileClock } from "lucide-react";
 import DashboardHeader from "@/components/DashboardHeader";
-import { supabase } from "@/integrations/supabase/client";
+import { createClient } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
 import { Toaster } from "@/components/ui/toaster";
 import { saveReportToDrive, listReportsFromDrive, readReportFromDrive } from "../../lib/gdrive";
 
 export default function SessionWorkspace() {
+    const supabase = createClient();
     const [isRecording, setIsRecording] = useState(false);
     const [timer, setTimer] = useState("00:00");
     const [notes, setNotes] = useState("");

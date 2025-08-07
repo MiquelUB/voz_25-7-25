@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Play, Square, Mic, Trash2, Headphones } from "lucide-react";
+import { Play, Square, Mic, Trash2, Headphones, FileAudio, FileText } from "lucide-react";
 import DashboardHeader from "@/components/DashboardHeader";
 
 export default function SessionWorkspace() {
@@ -160,6 +160,26 @@ export default function SessionWorkspace() {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
           />
+        </CardContent>
+      </Card>
+
+      <Card className="bg-white shadow-lg">
+        <CardHeader>
+          <CardTitle className="font-sans text-xl">
+            Archivos Adicionales
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Button variant="secondary" className="w-full sm:w-auto">
+              <FileAudio className="mr-2 h-5 w-5" />
+              Adjuntar Audio
+            </Button>
+            <Button variant="secondary" className="w-full sm:w-auto">
+              <FileText className="mr-2 h-5 w-5" />
+              Adjuntar Notas
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

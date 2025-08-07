@@ -1,6 +1,6 @@
 // src/services/reportApi.ts
 
-import { supabase } from '@/integrations/supabase/client';
+import { createClient } from '@/integrations/supabase/client';
 
 /**
  * Llama a la Edge Function 'informe-inteligente' para generar un nuevo informe.
@@ -17,6 +17,7 @@ export async function generateIntelligentReport(
   sessionNotes: string,
   previousReport?: string
 ) {
+  const supabase = createClient();
   // 1. Asegurarse de que el usuario tiene una sesión activa.
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) {

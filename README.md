@@ -15,7 +15,7 @@ INFORIA es una plataforma integral de gestión clínica diseñada para profesion
 - **Zero-Knowledge**: Informes guardados en Google Drive del usuario
 
 ### 🔧 Tecnologías Utilizadas
-- **Frontend**: React + TypeScript + Vite
+- **Frontend**: Next.js + React + TypeScript
 - **UI**: shadcn/ui + Tailwind CSS
 - **Backend**: Supabase (PostgreSQL + Edge Functions)
 - **IA**: OpenRouter API (GPT-4o-mini)
@@ -72,8 +72,8 @@ cp env.example .env.local
 **Paso 3**: Rellenar el archivo `.env.local`
 ```bash
 # Supabase Configuration
-VITE_SUPABASE_URL="https://tu-proyecto.supabase.co"
-VITE_SUPABASE_ANON_KEY="tu-anon-key"
+NEXT_PUBLIC_SUPABASE_URL="https://tu-proyecto.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="tu-anon-key"
 
 # OpenRouter API Key
 OPENROUTER_API_KEY="tu-openrouter-key"
@@ -110,23 +110,28 @@ supabase db push
 npm run dev
 ```
 
-El proyecto estará disponible en `http://localhost:5173`
+El proyecto estará disponible en `http://localhost:3000`
 
 ## 📚 Estructura del Proyecto
 
 ```
-voz_25-7-25-main/
-├── src/
-│   ├── components/          # Componentes UI reutilizables
-│   ├── pages/              # Páginas de la aplicación
-│   ├── services/           # Servicios API
-│   ├── hooks/              # Custom hooks
-│   └── integrations/       # Configuraciones de servicios externos
+inforia/
+├── app/
+│   ├── (auth)/             # Rutas de autenticación
+│   ├── (main)/             # Rutas principales de la aplicación
+│   │   ├── layout.tsx
+│   │   └── page.tsx
+│   ├── api/                # Rutas de API
+│   ├── layout.tsx          # Layout principal
+│   └── page.tsx            # Página de inicio
+├── components/
+│   └── ui/                 # Componentes de shadcn/ui
+├── public/                 # Archivos estáticos
 ├── supabase/
 │   ├── functions/          # Edge Functions
 │   └── migrations/         # Migraciones de base de datos
-├── docs/                   # Documentación del proyecto
-└── components/             # Componentes adicionales
+├── lib/                    # Funciones de utilidad
+└── ...
 ```
 
 ## 🔐 Seguridad y Variables de Entorno
@@ -135,8 +140,8 @@ voz_25-7-25-main/
 
 | Variable | Descripción | Dónde Obtener |
 |----------|-------------|---------------|
-| `VITE_SUPABASE_URL` | URL de tu proyecto Supabase | Supabase Dashboard > Settings > API |
-| `VITE_SUPABASE_ANON_KEY` | Clave anónima de Supabase | Supabase Dashboard > Settings > API |
+| `NEXT_PUBLIC_SUPABASE_URL` | URL de tu proyecto Supabase | Supabase Dashboard > Settings > API |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Clave anónima de Supabase | Supabase Dashboard > Settings > API |
 | `OPENROUTER_API_KEY` | Clave de API de OpenRouter | https://openrouter.ai/keys |
 
 ### Variables Opcionales
@@ -172,19 +177,20 @@ voz_25-7-25-main/
 Configura estas variables en tu plataforma de despliegue:
 
 ```bash
-VITE_SUPABASE_URL=https://tu-proyecto.supabase.co
-VITE_SUPABASE_ANON_KEY=tu-anon-key
+NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=tu-anon-key
 OPENROUTER_API_KEY=tu-openrouter-key
 ```
 
 ## 🧪 Testing
 
 ### Ejecutar Tests
+Para ejecutar la suite de tests, usa el siguiente comando:
 ```bash
 npm run test
 ```
 
-### Ejecutar Tests en Modo Watch
+Esto ejecutará Jest y mostrará los resultados en la consola. Para ejecutar los tests en modo "watch" (observador), puedes usar:
 ```bash
 npm run test:watch
 ```

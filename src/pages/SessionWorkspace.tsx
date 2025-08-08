@@ -12,10 +12,12 @@ import DashboardHeader from "@/components/DashboardHeader";
 import { createClient } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
 import { Toaster } from "@/components/ui/toaster";
-import { saveReportToDrive, listReportsFromDrive, readReportFromDrive } from "../../lib/gdrive";
+import { GoogleDriveService } from "@/src/services/google.service";
+import { useSession } from "next-auth/react";
 
 export default function SessionWorkspace() {
     const supabase = createClient();
+    const { data: session } = useSession();
     const [isRecording, setIsRecording] = useState(false);
     const [timer, setTimer] = useState("00:00");
     const [notes, setNotes] = useState("");
@@ -43,25 +45,28 @@ export default function SessionWorkspace() {
 
     // Fetch previous reports on component mount
     useEffect(() => {
-        const fetchReports = async () => {
-            setIsLoadingReports(true);
-            try {
-                const reports = await listReportsFromDrive();
-                setPreviousReports(reports);
-            } catch (error) {
-                console.error("Error fetching previous reports:", error);
-                toast({
-                    title: "Error al Cargar Informes",
-                    description: "No se pudieron cargar los informes anteriores desde Google Drive.",
-                    variant: "destructive",
-                });
-            } finally {
-                setIsLoadingReports(false);
-            }
-        };
+        if (session?.accessToken) {
+            const driveService = new GoogleDriveService(session.accessToken);
+            const fetchReports = async () => {
+                setIsLoadingReports(true);
+                try {
+                    const reports = await driveService.listReportsFromDrive();
+                    setPreviousReports(reports);
+                } catch (error) {
+                    console.error("Error fetching previous reports:", error);
+                    toast({
+                        title: "Error al Cargar Informes",
+                        description: "No se pudieron cargar los informes anteriores desde Google Drive.",
+                        variant: "destructive",
+                    });
+                } finally {
+                    setIsLoadingReports(false);
+                }
+            };
 
-        fetchReports();
-    }, [toast]);
+            fetchReports();
+        }
+    }, [session, toast]);
 
     const handleStartRecording = async () => {
         try {
@@ -179,20 +184,23 @@ export default function SessionWorkspace() {
             return;
         }
 
-        try {
-            const content = await readReportFromDrive(reportId);
-            setSelectedReportContent(content);
-            toast({
-                title: "Informe Cargado",
-                description: "El informe anterior ha sido cargado para análisis evolutivo.",
-            });
-        } catch (error) {
-            console.error("Error reading selected report:", error);
-            toast({
-                title: "Error al Cargar Informe",
-                description: "No se pudo leer el contenido del informe seleccionado.",
-                variant: "destructive",
-            });
+        if (session?.accessToken) {
+            const driveService = new GoogleDriveService(session.accessToken);
+            try {
+                const content = await driveService.readReportFromDrive(reportId);
+                setSelectedReportContent(content);
+                toast({
+                    title: "Informe Cargado",
+                    description: "El informe anterior ha sido cargado para análisis evolutivo.",
+                });
+            } catch (error) {
+                console.error("Error reading selected report:", error);
+                toast({
+                    title: "Error al Cargar Informe",
+                    description: "No se pudo leer el contenido del informe seleccionado.",
+                    variant: "destructive",
+                });
+            }
         }
     };
 
@@ -230,8 +238,8 @@ export default function SessionWorkspace() {
         }
 
         try {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
+            const { data: { session: authSession } } = await supabase.auth.getSession();
+            if (!authSession) {
                 toast({
                     title: "Error de autenticación",
                     description: "No se pudo verificar tu sesión. Por favor, inicia sesión de nuevo.",
@@ -249,7 +257,7 @@ export default function SessionWorkspace() {
             const { data, error } = await supabase.functions.invoke("informe-inteligente", {
                 body: formData,
                 headers: {
-                    'Authorization': `Bearer ${session.access_token}`,
+                    'Authorization': `Bearer ${authSession.access_token}`,
                 }
             });
 
@@ -258,8 +266,9 @@ export default function SessionWorkspace() {
                 setGeneratedReport(data.report);
                 toast({
                     title: "Informe Generado",
-                    description: "El informe de IA se ha creado exitosamente.",
+                    description: "El informe de IA se ha creado exitosamente. Guardando en Google Drive...",
                 });
+                await handleSaveReport(data.report);
             } else {
                 throw new Error("La respuesta de la función no contenía un informe.");
             }
@@ -276,21 +285,26 @@ export default function SessionWorkspace() {
         }
     };
 
-    const handleSaveReport = async () => {
-        if (!generatedReport) {
+    const handleSaveReport = async (reportToSave: string) => {
+        if (!session?.accessToken) {
+            toast({ title: "Error de autenticación", variant: "destructive" });
+            return;
+        }
+        if (!reportToSave) {
             toast({ title: "Error", description: "No hay informe generado para guardar.", variant: "destructive" });
             return;
         }
 
         setIsSaving(true);
+        const driveService = new GoogleDriveService(session.accessToken);
         try {
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const fileName = `iNFORiA-Report-${timestamp}.txt`;
-            const fileId = await saveReportToDrive(fileName, generatedReport);
+            const timestamp = new Date().toISOString().split('T')[0];
+            const fileName = `Informe-iNFORiA-${timestamp}.txt`;
+            const fileId = await driveService.saveReportToDrive(fileName, reportToSave);
 
             if (fileId) {
                 setSavedReportId(fileId);
-                const updatedReports = await listReportsFromDrive();
+                const updatedReports = await driveService.listReportsFromDrive();
                 setPreviousReports(updatedReports);
                 toast({
                     title: "Informe Guardado",
@@ -539,14 +553,8 @@ export default function SessionWorkspace() {
                     <CardHeader>
                         <CardTitle className="font-sans text-xl flex justify-between items-center">
                             <span>Informe Generado por IA</span>
-                            <Button
-                                onClick={handleSaveReport}
-                                disabled={isSaving || !!savedReportId}
-                                size="sm"
-                            >
-                                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                                {savedReportId ? "Guardado" : (isSaving ? "Guardando..." : "Guardar en Drive")}
-                            </Button>
+                            {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            {savedReportId && <span className="text-sm text-green-600">Guardado en Drive</span>}
                         </CardTitle>
                     </CardHeader>
                     <CardContent>

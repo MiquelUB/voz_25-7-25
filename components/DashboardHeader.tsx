@@ -12,7 +12,7 @@ import {
   Avatar,
   AvatarFallback,
 } from "@/components/ui/avatar";
-import { Link } from "react-router-dom";
+import Link from "next/link";
 
 const Header = () => {
   return (
@@ -21,7 +21,7 @@ const Header = () => {
         <div className="flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center">
-            <Link to="/" className="hover:opacity-80 transition-calm">
+            <Link href="/" className="hover:opacity-80 transition-calm">
               <h1 className="font-serif text-2xl font-medium text-primary">iNFORiA</h1>
             </Link>
           </div>
@@ -48,26 +48,26 @@ const Header = () => {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuItem className="cursor-pointer">
-                  <Link to="/" className="w-full flex items-center">
+                  <Link href="/" className="w-full flex items-center">
                     <Calendar className="mr-2 h-4 w-4" />
                     Dashboard
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem className="cursor-pointer">
-                  <Link to="/patient-list" className="w-full flex items-center">
+                  <Link href="/patient-list" className="w-full flex items-center">
                     <Users className="mr-2 h-4 w-4" />
                     Pacientes
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem className="cursor-pointer">
-                  <Link to="/new-patient" className="w-full flex items-center">
+                  <Link href="/new-patient" className="w-full flex items-center">
                     <Plus className="mr-2 h-4 w-4" />
                     Crear Ficha de Paciente
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem className="cursor-pointer">
-                  <Link to="/faqs" className="w-full flex items-center">
+                  <Link href="/faqs" className="w-full flex items-center">
                     <HelpCircle className="mr-2 h-4 w-4" />
                     FAQs
                   </Link>
@@ -88,7 +88,7 @@ const Header = () => {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem className="cursor-pointer">
-                  <Link to="/my-account" className="w-full">Mi Cuenta</Link>
+                  <Link href="/my-account" className="w-full">Mi Cuenta</Link>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

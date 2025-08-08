@@ -147,4 +147,86 @@ export class GoogleDriveService {
     const apiCall = () => this.drive.files.delete({ fileId });
     await this.executeWithRetry(apiCall);
   }
+
+  private async findFileIdByName(
+    fileName: string,
+    parentId?: string
+  ): Promise<string | null> {
+    let query = `name='${fileName}' and trashed=false`;
+    if (parentId) {
+      query += ` and '${parentId}' in parents`;
+    } else {
+      query += ` and 'root' in parents`;
+    }
+
+    const apiCall = () =>
+      this.drive.files.list({
+        q: query,
+        fields: 'files(id)',
+        spaces: 'drive',
+      });
+
+    const res = await this.executeWithRetry(apiCall);
+    if (res.data.files && res.data.files.length > 0 && res.data.files[0].id) {
+      return res.data.files[0].id;
+    }
+    return null;
+  }
+
+  async saveFile(
+    fileName: string,
+    content: string,
+    parentId?: string
+  ): Promise<string> {
+    const fileId = await this.findFileIdByName(fileName, parentId);
+
+    if (fileId) {
+      // File exists, update it
+      const apiCall = () =>
+        this.drive.files.update({
+          fileId: fileId,
+          media: {
+            mimeType: 'application/json',
+            body: content,
+          },
+        });
+      const res = await this.executeWithRetry(apiCall);
+      if (!res.data.id) {
+        throw new Error('Failed to update file in Google Drive.');
+      }
+      return res.data.id;
+    } else {
+      // File does not exist, create it
+      const requestBody = {
+        name: fileName,
+        mimeType: 'application/json',
+        ...(parentId && { parents: [parentId] }),
+      };
+      const apiCall = () =>
+        this.drive.files.create({
+          requestBody,
+          media: {
+            mimeType: 'application/json',
+            body: content,
+          },
+          fields: 'id',
+        });
+      const res = await this.executeWithRetry(apiCall);
+      if (!res.data.id) {
+        throw new Error('Failed to create file in Google Drive.');
+      }
+      return res.data.id;
+    }
+  }
+
+  async readFile(
+    fileName: string,
+    parentId?: string
+  ): Promise<string | null> {
+    const fileId = await this.findFileIdByName(fileName, parentId);
+    if (!fileId) {
+      return null;
+    }
+    return this.readReportFromDrive(fileId);
+  }
 }

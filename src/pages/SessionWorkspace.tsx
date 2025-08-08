@@ -12,8 +12,8 @@ import DashboardHeader from "@/components/DashboardHeader";
 import { createClient } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
 import { Toaster } from "@/components/ui/toaster";
-import { GoogleDriveService } from "@/src/services/google.service";
-import { useSession } from "next-auth/react";
+import { GoogleDriveService, InvalidTokenError } from "@/src/services/google.service";
+import { useSession, signOut } from "next-auth/react";
 
 export default function SessionWorkspace() {
     const supabase = createClient();
@@ -43,6 +43,24 @@ export default function SessionWorkspace() {
     const audioInputRef = useRef<HTMLInputElement>(null);
     const notesInputRef = useRef<HTMLInputElement>(null);
 
+    const handleDriveError = (error: any, title: string) => {
+        console.error(error);
+        if (error instanceof InvalidTokenError) {
+            toast({
+                title: "Permisos de Google Drive requeridos",
+                description: "Tu sesión ha expirado o los permisos fueron revocados. Por favor, autentícate de nuevo.",
+                variant: "destructive",
+                action: <Button onClick={() => signOut()}>Re-autenticar</Button>,
+            });
+        } else {
+            toast({
+                title,
+                description: "Ha ocurrido un error inesperado. Revisa la consola para más detalles.",
+                variant: "destructive",
+            });
+        }
+    };
+
     // Fetch previous reports on component mount
     useEffect(() => {
         if (session?.accessToken) {
@@ -53,12 +71,7 @@ export default function SessionWorkspace() {
                     const reports = await driveService.listReportsFromDrive();
                     setPreviousReports(reports);
                 } catch (error) {
-                    console.error("Error fetching previous reports:", error);
-                    toast({
-                        title: "Error al Cargar Informes",
-                        description: "No se pudieron cargar los informes anteriores desde Google Drive.",
-                        variant: "destructive",
-                    });
+                    handleDriveError(error, "Error al Cargar Informes");
                 } finally {
                     setIsLoadingReports(false);
                 }
@@ -194,12 +207,7 @@ export default function SessionWorkspace() {
                     description: "El informe anterior ha sido cargado para análisis evolutivo.",
                 });
             } catch (error) {
-                console.error("Error reading selected report:", error);
-                toast({
-                    title: "Error al Cargar Informe",
-                    description: "No se pudo leer el contenido del informe seleccionado.",
-                    variant: "destructive",
-                });
+                handleDriveError(error, "Error al Cargar Informe");
             }
         }
     };
@@ -314,12 +322,7 @@ export default function SessionWorkspace() {
                 throw new Error("No se pudo obtener el ID del archivo guardado.");
             }
         } catch (error) {
-            console.error("Error saving report to Google Drive:", error);
-            toast({
-                title: "Error al Guardar",
-                description: "No se pudo guardar el informe en Google Drive. Revisa los permisos y la consola.",
-                variant: "destructive",
-            });
+            handleDriveError(error, "Error al Guardar");
         } finally {
             setIsSaving(false);
         }

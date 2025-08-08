@@ -1,1 +1,4 @@
 project_id = "pwhyrqjmzhkuguvfkrkc"
+
+[functions.notificacion-cuota-baja]
+cron = "0 0 * * *"

@@ -196,11 +196,45 @@ serve(async (req) => {
         });
     }
 
-    // 3. --- Ejecución del Flujo Principal ---
+    // 3. --- Verificación de Cuota ---
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('informes_restantes')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError) {
+      console.error("Error fetching user profile:", profileError);
+      return new Response(JSON.stringify({ error: "Could not retrieve user profile." }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500,
+      });
+    }
+
+    if (profile.informes_restantes <= 0) {
+      return new Response(JSON.stringify({ error: "No te quedan informes disponibles." }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 403, // Forbidden
+      });
+    }
+
+    // 4. --- Ejecución del Flujo Principal ---
     const transcription = await transcribeAudio(audioFile);
     const report = await generateReport(transcription, sessionNotes, previousReport || undefined);
 
-    // 4. --- Respuesta Exitosa ---
+    // 5. --- Decrementar Cuota ---
+    const { error: updateError } = await supabaseAdmin
+      .from('profiles')
+      .update({ informes_restantes: profile.informes_restantes - 1 })
+      .eq('id', user.id);
+
+    if (updateError) {
+      // Si esto falla, es importante registrarlo, pero el informe ya se generó.
+      // Podríamos tener un sistema de reintentos o alertas para el equipo de desarrollo.
+      console.error("CRITICAL: Failed to decrement report count for user:", user.id, updateError);
+    }
+
+    // 6. --- Respuesta Exitosa ---
     return new Response(JSON.stringify({ report }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,

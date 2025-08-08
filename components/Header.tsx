@@ -10,14 +10,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Link } from "react-router-dom";
+import Link from "next/link";
 
 export const Header = () => {
   return (
     <header className="h-20 bg-background border-b border-module-border px-8 flex items-center justify-between shadow-sm">
       {/* Logo e Identidad de Marca */}
       <div className="flex items-center space-x-4">
-        <Link to="/" className="hover:opacity-80 transition-calm">
+        <Link href="/" className="hover:opacity-80 transition-calm">
           <div className="flex items-center">
             <h1 className="text-3xl font-serif font-medium text-primary tracking-tight">
               iNFORiA
@@ -49,25 +49,25 @@ export const Header = () => {
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-48 bg-background border-module-border shadow-lg" align="end">
             <DropdownMenuItem className="font-sans cursor-pointer" asChild>
-              <Link to="/" className="w-full flex items-center">
+              <Link href="/" className="w-full flex items-center">
                 <Calendar className="mr-3 h-4 w-4" />
                 Dashboard
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem className="font-sans cursor-pointer" asChild>
-              <Link to="/patient-list" className="w-full flex items-center">
+              <Link href="/patient-list" className="w-full flex items-center">
                 <Users className="mr-3 h-4 w-4" />
                 Mis Pacientes
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem className="font-sans cursor-pointer" asChild>
-              <Link to="/new-patient" className="w-full flex items-center">
+              <Link href="/new-patient" className="w-full flex items-center">
                 <Plus className="mr-3 h-4 w-4" />
                 Nuevo Paciente
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem className="font-sans cursor-pointer" asChild>
-              <Link to="/faqs" className="w-full flex items-center">
+              <Link href="/faqs" className="w-full flex items-center">
                 <HelpCircle className="mr-3 h-4 w-4" />
                 FAQs
               </Link>
@@ -97,7 +97,7 @@ export const Header = () => {
             </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="font-sans cursor-pointer" asChild>
-              <Link to="/my-account" className="w-full flex items-center">
+              <Link href="/cuenta" className="w-full flex items-center">
                 <User className="mr-3 h-4 w-4" />
                 Mi Cuenta
               </Link>

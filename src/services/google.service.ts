@@ -5,6 +5,13 @@ const FOLDER_NAME = 'iNFORiA_Reports';
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000;
 
+export class InvalidTokenError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidTokenError';
+  }
+}
+
 export class GoogleDriveService {
   private drive: drive_v3.Drive;
 
@@ -21,16 +28,22 @@ export class GoogleDriveService {
     try {
       return await apiCall();
     } catch (error) {
-      if (
-        error instanceof GaxiosError &&
-        error.response &&
-        (error.response.status === 429 || error.response.status >= 500) &&
-        retryCount < MAX_RETRIES
-      ) {
-        const backoff = INITIAL_BACKOFF_MS * Math.pow(2, retryCount);
-        console.log(`Retrying API call after ${backoff}ms...`);
-        await new Promise((resolve) => setTimeout(resolve, backoff));
-        return this.executeWithRetry(apiCall, retryCount + 1);
+      if (error instanceof GaxiosError && error.response) {
+        // Handle token errors
+        if (error.response.status === 401 || error.response.status === 403) {
+          throw new InvalidTokenError('The access token is invalid or expired.');
+        }
+
+        // Handle rate limiting and server errors with retry logic
+        if (
+          (error.response.status === 429 || error.response.status >= 500) &&
+          retryCount < MAX_RETRIES
+        ) {
+          const backoff = INITIAL_BACKOFF_MS * Math.pow(2, retryCount);
+          console.log(`Retrying API call after ${backoff}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, backoff));
+          return this.executeWithRetry(apiCall, retryCount + 1);
+        }
       }
       throw error;
     }

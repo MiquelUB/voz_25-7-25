@@ -1,0 +1,158 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* iNFORiA Design System - Puesto de Mando Clínico
+Official Brand Colors and Typography for Psychologist Entrepreneurs
+All colors MUST be HSL for consistency.
+*/
+
+@layer base {
+  :root {
+    /* iNFORiA Brand Colors - Official Palette */
+    --background: 40 40% 98%; /* Blanco Hueso #FBF9F6 */
+    --foreground: 0 0% 20%; /* Gris Grafito #333333 */
+
+    --card: 0 0% 100%; /* Pure white for cards */
+    --card-foreground: 0 0% 20%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 20%;
+
+    /* Verde INFORIA (#2E403B) - HSL: 155, 17%, 21% */
+    --primary: 155 17% 21%;
+    --primary-foreground: 40 40% 98%; /* Blanco Hueso for text on green */
+    --inforia: 155 17% 21%; /* Verde INFORIA */
+    --inforia-foreground: 40 40% 98%;
+    
+    /* Blanco Hueso (#FBF9F6) - HSL: 40, 40%, 98% */
+    --bone: 40 40% 98%;
+    --bone-foreground: 155 17% 21%;
+    
+    /* Burdeos Acento (#800020) - HSL: 345, 100%, 25% */
+    --burgundy: 345 100% 25%;
+    --burgundy-foreground: 40 40% 98%;
+    
+    /* Dorado Premium (#D4AF37) - HSL: 43, 74%, 49% */
+    --gold: 43 74% 49%;
+    --gold-foreground: 0 0% 20%;
+
+    /* Secondary using Blanco Hueso background */
+    --secondary: 40 40% 96%;
+    --secondary-foreground: 155 17% 21%;
+
+    --muted: 40 25% 93%;
+    --muted-foreground: 0 0% 45%;
+
+    --accent: 155 17% 21%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 40 15% 88%;
+    --input: 40 15% 88%;
+    --ring: 155 17% 21%;
+
+    --radius: 0.75rem; /* Rounded corners for modern feel */
+
+    /* Calendar specific colors */
+    --calendar-today: 155 25% 35%;
+    --calendar-selected: 155 17% 21%;
+    --calendar-hover: 155 10% 90%;
+
+    /* Module backgrounds */
+    --module-background: 0 0% 100%;
+    --module-border: 40 15% 90%;
+
+    /* Dropzone colors */
+    --dropzone-border: 155 15% 75%;
+    --dropzone-background: 155 5% 97%;
+    --dropzone-active: 155 25% 92%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+
+  /* Typography System */
+  .font-serif {
+    font-family: 'Lora', serif;
+  }
+
+  .font-sans {
+    font-family: 'Nunito Sans', sans-serif;
+  }
+
+  /* Module title styling */
+  .module-title {
+    @apply font-serif text-xl font-medium text-foreground;
+  }
+
+  /* Calm animations */
+  .transition-calm {
+    transition: all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+
+  /* Custom scrollbar */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 3px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+}

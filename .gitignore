@@ -1,0 +1,7 @@
+﻿# Fitxers d'entorn i secrets
+.env
+.env.*
+
+# Fitxers de build i temporals
+dist/
+node_modules/
